@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/Label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { toast } from 'sonner';
 import { Bot, ArrowLeft } from 'lucide-react';
+import { parseApiError } from '@/lib/errorParser';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -24,12 +25,14 @@ export function Login() {
       toast.success('Zalogowano pomyślnie!');
       navigate('/projects');
     } catch (error: any) {
-      // Don't show error toast for 401 during login - wrong credentials are expected
-      if (error.response?.status !== 401) {
-        toast.error(error.response?.data?.detail || 'Logowanie nie powiodło się');
-      } else {
-        // For 401 on login, show specific message about wrong credentials
+      // Handle validation errors (400) and authentication errors (401)
+      if (error.response?.status === 401) {
         toast.error('Nieprawidłowy email lub hasło');
+      } else if (error.response?.status === 422) {
+        // Pydantic validation error (e.g., invalid email format)
+        toast.error(parseApiError(error, 'Nieprawidłowe dane logowania'));
+      } else {
+        toast.error(parseApiError(error, 'Logowanie nie powiodło się'));
       }
     } finally {
       setIsLoading(false);

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/Label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { toast } from 'sonner';
 import { Bot, ArrowLeft } from 'lucide-react';
+import { parseApiError } from '@/lib/errorParser';
 
 export function Register() {
   const [email, setEmail] = useState('');
@@ -59,9 +60,13 @@ export function Register() {
       toast.success('Konto utworzone pomyślnie!');
       navigate('/projects');
     } catch (error: any) {
-      // Don't show error toast for 401 - interceptor handles redirect to login
-      if (error.response?.status !== 401) {
-        toast.error(error.response?.data?.detail || 'Rejestracja nie powiodła się');
+      // Handle different error types
+      if (error.response?.status === 422) {
+        // Pydantic validation error (e.g., invalid email format)
+        toast.error(parseApiError(error, 'Nieprawidłowe dane rejestracji'));
+      } else if (error.response?.status !== 401) {
+        // Other errors (401 is handled by interceptor)
+        toast.error(parseApiError(error, 'Rejestracja nie powiodła się'));
       }
     } finally {
       setIsLoading(false);

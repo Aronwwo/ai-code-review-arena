@@ -28,6 +28,7 @@ import {
   Plus, Trash2, Edit, Check, Globe, Cpu, Loader2
 } from 'lucide-react';
 import api from '@/lib/api';
+import { parseApiError } from '@/lib/errorParser';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Interfejs dla custom providera
@@ -223,8 +224,11 @@ export function Settings() {
       setConfirmNewPassword('');
     } catch (error: any) {
       // Don't show error toast for 401 - interceptor handles redirect to login
-      if (error.response?.status !== 401) {
-        toast.error(error.response?.data?.detail || 'Nie udało się zmienić hasła');
+      if (error.response?.status === 422) {
+        // Pydantic validation error
+        toast.error(parseApiError(error, 'Nieprawidłowe dane hasła'));
+      } else if (error.response?.status !== 401) {
+        toast.error(parseApiError(error, 'Nie udało się zmienić hasła'));
       }
     } finally {
       setIsChangingPassword(false);
