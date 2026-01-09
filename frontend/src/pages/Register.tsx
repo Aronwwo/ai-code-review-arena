@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { toast } from 'sonner';
 import { Bot, ArrowLeft } from 'lucide-react';
 import { parseApiError } from '@/lib/errorParser';
+import { validatePassword, validateEmail } from '@/lib/validation';
 
 export function Register() {
   const [email, setEmail] = useState('');
@@ -17,20 +18,6 @@ export function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
-
-  const validatePassword = (pwd: string): { valid: boolean; errors: string[] } => {
-    const errors: string[] = [];
-    if (pwd.length < 8) errors.push('Minimum 8 znaków');
-    if (!/[A-Z]/.test(pwd)) errors.push('Wielka litera');
-    if (!/[a-z]/.test(pwd)) errors.push('Mała litera');
-    if (!/\d/.test(pwd)) errors.push('Cyfra');
-    return { valid: errors.length === 0, errors };
-  };
-
-  const validateEmail = (email: string): boolean => {
-    const pattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    return pattern.test(email);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

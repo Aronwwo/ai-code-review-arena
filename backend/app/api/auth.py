@@ -7,6 +7,7 @@ from app.database import get_session
 from app.models.user import User, UserCreate, UserLogin, UserRead, Token, TokenWithRefresh, RefreshTokenRequest, PasswordChange
 from app.utils.auth import hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token
 from app.utils.audit import log_audit_event, get_client_ip, get_user_agent
+from app.utils.rate_limit import check_rate_limit
 from app.models.audit import AuditAction
 from app.api.deps import get_current_user
 
@@ -115,7 +116,13 @@ async def register(user_data: UserCreate, request: Request, session: Session = D
 
 @router.post("/login", response_model=TokenWithRefresh)
 async def login(credentials: UserLogin, request: Request, session: Session = Depends(get_session)):
-    """Login and get access and refresh tokens."""
+    """Login and get access and refresh tokens.
+
+    Rate limited to 5 attempts per minute per IP address to prevent brute force attacks.
+    """
+    # Apply login-specific rate limiting (5 attempts per minute)
+    check_rate_limit(request, user_id=None, limit=5)
+
     # Find user by email
     statement = select(User).where(User.email == credentials.email)
     user = session.exec(statement).first()

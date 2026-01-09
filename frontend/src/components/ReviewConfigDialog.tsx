@@ -84,7 +84,7 @@ export function ReviewConfigDialog({
   });
 
   // Fetch Ollama models
-  const { data: ollamaModelsData, isLoading: modelsLoading, refetch: refetchOllama } = useQuery<OllamaModelsResponse>({
+  const { data: ollamaModelsData, isLoading: modelsLoading } = useQuery<OllamaModelsResponse>({
     queryKey: ['ollama-models'],
     queryFn: async () => {
       try {
