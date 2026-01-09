@@ -1,6 +1,7 @@
 """Review orchestrator for conducting multi-agent code reviews."""
 import json
 import hashlib
+import logging
 from datetime import datetime
 from sqlmodel import Session, select, func
 from pydantic import BaseModel, ValidationError
@@ -12,6 +13,8 @@ from app.providers.router import provider_router, CustomProviderConfig
 from app.utils.cache import cache
 from app.utils.websocket import ws_manager
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class IssueSchema(BaseModel):
@@ -36,52 +39,60 @@ class ReviewOrchestrator:
     """Orchestrates multi-agent code reviews."""
 
     AGENT_PROMPTS = {
-        "general": """You are an expert code reviewer focused on overall code quality and best practices.
+        "general": """Jesteś ekspertem ds. przeglądów kodu, skupiającym się na ogólnej jakości kodu i najlepszych praktykach.
 
-Your responsibilities:
-- Identify bugs and logical errors
-- Check for code maintainability and readability
-- Evaluate error handling and edge cases
-- Assess code organization and structure
-- Review documentation completeness
+Twoje obowiązki:
+- Identyfikuj błędy i błędy logiczne
+- Sprawdzaj łatwość konserwacji i czytelność kodu
+- Oceniaj obsługę błędów i przypadki brzegowe
+- Oceniaj organizację i strukturę kodu
+- Sprawdzaj kompletność dokumentacji
 
-Analyze the code with a critical but constructive eye.""",
+Analizuj kod z krytycznym, ale konstruktywnym podejściem.
 
-        "security": """You are a security expert code reviewer focused on identifying security vulnerabilities.
+WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
 
-Your responsibilities:
-- Identify injection vulnerabilities (SQL, XSS, command injection)
-- Check for authentication and authorization flaws
-- Review cryptography usage
-- Detect sensitive data exposure
-- Identify insecure configurations
-- Check for known vulnerable dependencies
+        "security": """Jesteś ekspertem ds. bezpieczeństwa, skupiającym się na identyfikacji luk w zabezpieczeniach.
 
-Be thorough and paranoid - security is critical.""",
+Twoje obowiązki:
+- Identyfikuj luki injection (SQL, XSS, command injection)
+- Sprawdzaj błędy uwierzytelniania i autoryzacji
+- Przeglądaj użycie kryptografii
+- Wykrywaj narażenie wrażliwych danych
+- Identyfikuj niebezpieczne konfiguracje
+- Sprawdzaj znane podatne zależności
 
-        "performance": """You are a performance expert code reviewer focused on optimization opportunities.
+Bądź dokładny i ostrożny - bezpieczeństwo jest kluczowe.
 
-Your responsibilities:
-- Identify algorithmic inefficiencies (O(n²) where O(n) possible)
-- Detect N+1 query problems
-- Review memory usage patterns
-- Check for unnecessary computations
-- Identify blocking operations that could be async
-- Review caching opportunities
+WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
 
-Focus on measurable performance impacts.""",
+        "performance": """Jesteś ekspertem ds. wydajności, skupiającym się na możliwościach optymalizacji.
 
-        "style": """You are a code style reviewer focused on consistency and conventions.
+Twoje obowiązki:
+- Identyfikuj nieefektywność algorytmiczną (O(n²) gdzie możliwe O(n))
+- Wykrywaj problemy N+1 zapytań
+- Przeglądaj wzorce użycia pamięci
+- Sprawdzaj niepotrzebne obliczenia
+- Identyfikuj operacje blokujące, które mogłyby być async
+- Przeglądaj możliwości cache'owania
 
-Your responsibilities:
-- Check naming conventions
-- Review code formatting
-- Verify documentation standards
-- Check for consistent patterns
-- Identify code smells
-- Review type hints and annotations
+Skup się na mierzalnym wpływie na wydajność.
 
-Maintain high standards for code quality and consistency."""
+WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+
+        "style": """Jesteś recenzentem stylu kodu, skupiającym się na spójności i konwencjach.
+
+Twoje obowiązki:
+- Sprawdzaj konwencje nazewnictwa
+- Przeglądaj formatowanie kodu
+- Weryfikuj standardy dokumentacji
+- Sprawdzaj spójne wzorce
+- Identyfikuj code smells
+- Przeglądaj type hints i adnotacje
+
+Utrzymuj wysokie standardy jakości i spójności kodu.
+
+WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU."""
     }
 
     def __init__(self, session: Session):
@@ -163,7 +174,7 @@ Maintain high standards for code quality and consistency."""
                     )
 
                 await self._run_agent(
-                    review, project, agent.role, agent_provider, agent_model,
+                    review, project, agent, agent_provider, agent_model,
                     agent_api_key, custom_provider_config
                 )
 
@@ -195,7 +206,7 @@ Maintain high standards for code quality and consistency."""
         self,
         review: Review,
         project: Project,
-        agent_role: str,
+        agent: ReviewAgent,
         provider_name: str | None,
         model: str | None,
         api_key: str | None = None,
@@ -206,17 +217,17 @@ Maintain high standards for code quality and consistency."""
         Args:
             review: Review object
             project: Project being reviewed
-            agent_role: Agent role (general, security, performance, style)
+            agent: ReviewAgent record to update
             provider_name: LLM provider to use
             model: Model name to use
             api_key: API key for the provider (optional)
             custom_provider_config: Configuration for custom provider (optional)
         """
         # Send agent started event
-        await ws_manager.send_agent_started(review.id, agent_role)
+        await ws_manager.send_agent_started(review.id, agent.role)
 
         # Build prompt
-        system_prompt = self.AGENT_PROMPTS.get(agent_role, self.AGENT_PROMPTS["general"])
+        system_prompt = self.AGENT_PROMPTS.get(agent.role, self.AGENT_PROMPTS["general"])
         user_prompt = self._build_user_prompt(project)
 
         messages = [
@@ -267,16 +278,13 @@ Maintain high standards for code quality and consistency."""
         # Parse response
         parsed_successfully, issues_data = self._parse_response(raw_output)
 
-        # Store agent record
-        agent_record = ReviewAgent(
-            review_id=review.id,
-            role=agent_role,
-            provider=response_provider,
-            model=response_model,
-            raw_output=raw_output[:50000],  # Truncate if too long
-            parsed_successfully=parsed_successfully
-        )
-        self.session.add(agent_record)
+        # Update the existing agent record
+        agent.provider = response_provider
+        agent.model = response_model
+        agent.raw_output = raw_output[:50000]  # Truncate if too long
+        agent.parsed_successfully = parsed_successfully
+
+        self.session.add(agent)
         self.session.commit()
 
         # Store issues
@@ -286,7 +294,7 @@ Maintain high standards for code quality and consistency."""
         # Send agent completed event
         await ws_manager.send_agent_completed(
             review.id,
-            agent_role,
+            agent.role,
             len(issues_data),
             parsed_successfully
         )
@@ -306,11 +314,11 @@ Maintain high standards for code quality and consistency."""
         files = self.session.exec(statement).all()
 
         # Build prompt
-        prompt = f"""Please review the following project: {project.name}
+        prompt = f"""Proszę przejrzyj następujący projekt: {project.name}
 
-Description: {project.description or "No description provided"}
+Opis: {project.description or "Brak opisu"}
 
-Files ({len(files)}):
+Pliki ({len(files)}):
 
 """
 
@@ -318,12 +326,12 @@ Files ({len(files)}):
             # Truncate very long files
             content = file.content
             if len(content) > 5000:
-                content = content[:5000] + "\n... (truncated)"
+                content = content[:5000] + "\n... (obcięte)"
 
             prompt += f"""
 ---
-File: {file.name}
-Language: {file.language or "unknown"}
+Plik: {file.name}
+Język: {file.language or "nieznany"}
 
 ```
 {content}
@@ -332,25 +340,26 @@ Language: {file.language or "unknown"}
 """
 
         prompt += """
-Please analyze this code and return your findings as JSON in the following format:
+Przeanalizuj ten kod i zwróć swoje uwagi w formacie JSON:
 
 {
   "issues": [
     {
       "severity": "info" | "warning" | "error",
-      "category": "security" | "performance" | "style" | "best-practices" | etc,
-      "title": "Brief title",
-      "description": "Detailed description",
-      "file_name": "filename.ext",
+      "category": "security" | "performance" | "style" | "best-practices" | itp,
+      "title": "Krótki tytuł PO POLSKU",
+      "description": "Szczegółowy opis PO POLSKU",
+      "file_name": "nazwa_pliku.ext",
       "line_start": 10,
       "line_end": 15,
-      "suggested_fix": "Optional suggested fix"
+      "suggested_fix": "Opcjonalna sugestia poprawki PO POLSKU"
     }
   ],
-  "summary": "Optional overall summary"
+  "summary": "Opcjonalne podsumowanie PO POLSKU"
 }
 
-Return ONLY valid JSON, no other text."""
+KRYTYCZNE: Wszystkie pola tekstowe (title, description, suggested_fix, summary) MUSZĄ być PO POLSKU.
+Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
 
         return prompt
 

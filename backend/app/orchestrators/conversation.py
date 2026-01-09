@@ -1,5 +1,6 @@
 """Conversation orchestrator for agent discussions (Council and Arena modes)."""
 import json
+import logging
 from datetime import datetime
 from sqlmodel import Session, select
 from pydantic import BaseModel, ValidationError
@@ -10,6 +11,8 @@ from app.models.file import File
 from app.providers.base import LLMMessage
 from app.providers.router import provider_router
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ArenaVerdictSchema(BaseModel):
