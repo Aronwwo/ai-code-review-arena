@@ -21,6 +21,7 @@ import {
   Menu,
   X,
   Sword,
+  Swords,
   Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -41,6 +42,7 @@ export function DashboardLayout() {
   const navItems = [
     { path: '/dashboard', icon: FolderGit2, label: 'Projekty' },
     { path: '/model-duel/setup', icon: Sword, label: 'Model Duel' },
+    { path: '/arena/rankings', icon: Swords, label: 'Combat Arena' },
     { path: '/rankings', icon: Trophy, label: 'Rankingi' },
     { path: '/settings', icon: Settings, label: 'Ustawienia' },
   ];
