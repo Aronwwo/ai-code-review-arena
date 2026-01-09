@@ -47,6 +47,8 @@ async def list_projects(
     """List all projects for the current user with pagination.
 
     Returns paginated response with metadata including total count, page info.
+
+    Optimized: Uses single query with subqueries to avoid N+1 problem.
     """
     # Get total count
     total_stmt = select(func.count(Project.id)).where(Project.owner_id == current_user.id)
@@ -55,31 +57,32 @@ async def list_projects(
     # Calculate offset
     offset = (page - 1) * page_size
 
-    # Get projects for current page
+    # Get projects with counts in single query using subqueries
     statement = (
-        select(Project)
+        select(
+            Project,
+            func.count(File.id).label("file_count"),
+            func.count(Review.id).label("review_count")
+        )
+        .outerjoin(File, File.project_id == Project.id)
+        .outerjoin(Review, Review.project_id == Project.id)
         .where(Project.owner_id == current_user.id)
+        .group_by(Project.id)
         .offset(offset)
         .limit(page_size)
         .order_by(Project.created_at.desc())
     )
-    projects = session.exec(statement).all()
 
-    # Build responses with counts
+    # Execute query - returns tuples of (Project, file_count, review_count)
+    results = session.exec(statement).all()
+
+    # Build responses
     items = []
-    for project in projects:
-        # Count files
-        file_count_stmt = select(func.count(File.id)).where(File.project_id == project.id)
-        file_count = session.exec(file_count_stmt).one()
-
-        # Count reviews
-        review_count_stmt = select(func.count(Review.id)).where(Review.project_id == project.id)
-        review_count = session.exec(review_count_stmt).one()
-
+    for project, file_count, review_count in results:
         items.append(ProjectRead(
             **project.model_dump(),
-            file_count=file_count,
-            review_count=review_count
+            file_count=file_count or 0,
+            review_count=review_count or 0
         ))
 
     # Calculate pagination metadata

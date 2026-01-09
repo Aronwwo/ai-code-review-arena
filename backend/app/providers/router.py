@@ -87,20 +87,22 @@ class ProviderRouter:
         if provider_name_lower in ["mock", "ollama"]:
             return self.providers[provider_name_lower]
 
-        # Create a new provider instance with the API key
-        if provider_name_lower == "openai":
-            return OpenAIProvider(api_key=api_key)
-        elif provider_name_lower == "anthropic":
-            return AnthropicProvider(api_key=api_key)
-        elif provider_name_lower == "groq":
-            return GroqProvider(api_key=api_key)
-        elif provider_name_lower == "gemini":
-            return GeminiProvider(api_key=api_key)
-        elif provider_name_lower == "cloudflare":
-            return CloudflareProvider(api_key=api_key)
-        else:
-            # Fallback to default provider
-            return self.get_provider(provider_name)
+        # Map provider names to classes (cleaner than if-elif chain)
+        provider_classes = {
+            "openai": OpenAIProvider,
+            "anthropic": AnthropicProvider,
+            "groq": GroqProvider,
+            "gemini": GeminiProvider,
+            "cloudflare": CloudflareProvider,
+        }
+
+        # Get provider class and instantiate with API key
+        provider_class = provider_classes.get(provider_name_lower)
+        if provider_class:
+            return provider_class(api_key=api_key)
+
+        # Fallback to default provider
+        return self.get_provider(provider_name)
 
     def get_custom_provider(self, config: CustomProviderConfig) -> LLMProvider:
         """Create a custom provider from frontend configuration.

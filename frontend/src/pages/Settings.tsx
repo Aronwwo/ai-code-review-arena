@@ -1,3 +1,16 @@
+/**
+ * Settings Page - User configuration and provider management
+ *
+ * TODO (Clean Code): This file is 696 lines - too large!
+ * Should be refactored into smaller components:
+ * - ProviderList.tsx
+ * - ProviderForm.tsx
+ * - APIKeyManager.tsx
+ * - UserSettings.tsx
+ *
+ * Current structure works but violates Single Responsibility Principle.
+ */
+
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
