@@ -8,6 +8,7 @@ from sqlmodel import Field, Relationship, SQLModel, Column, JSON
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.project import Project
+    from app.models.review import Review
 
 EvaluationStatus = Literal["pending", "in_progress", "completed", "cancelled"]
 VoteChoice = Literal["candidate_a", "candidate_b", "tie"]
@@ -31,10 +32,10 @@ class EvaluationSession(SQLModel, table=True):
     completed_at: datetime | None = None
 
     # Relationships
-    project: Project = Relationship()
-    created_by_user: User = Relationship()
-    candidates: list[EvaluationCandidate] = Relationship(back_populates="session")
-    votes: list[EvaluationVote] = Relationship(back_populates="session")
+    project: "Project" = Relationship()
+    created_by_user: "User" = Relationship()
+    candidates: "EvaluationCandidate" = Relationship(back_populates="session")
+    votes: "EvaluationVote" = Relationship(back_populates="session")
 
 
 class EvaluationCandidate(SQLModel, table=True):
@@ -65,7 +66,7 @@ class EvaluationCandidate(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
-    session: EvaluationSession = Relationship(back_populates="candidates")
+    session: "EvaluationSession" = Relationship(back_populates="candidates")
 
 
 class EvaluationVote(SQLModel, table=True):
@@ -86,8 +87,8 @@ class EvaluationVote(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
-    session: EvaluationSession = Relationship(back_populates="votes")
-    voter: User = Relationship()
+    session: "EvaluationSession" = Relationship(back_populates="votes")
+    voter: "User" = Relationship()
 
 
 class RatingConfig(SQLModel, table=True):
