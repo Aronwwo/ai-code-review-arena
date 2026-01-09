@@ -20,6 +20,8 @@ import {
   Sun,
   Menu,
   X,
+  Sword,
+  Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -38,6 +40,8 @@ export function DashboardLayout() {
 
   const navItems = [
     { path: '/dashboard', icon: FolderGit2, label: 'Projekty' },
+    { path: '/model-duel/setup', icon: Sword, label: 'Model Duel' },
+    { path: '/rankings', icon: Trophy, label: 'Rankingi' },
     { path: '/settings', icon: Settings, label: 'Ustawienia' },
   ];
 
