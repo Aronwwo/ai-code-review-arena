@@ -177,6 +177,8 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
         # Run single round of discussion (optimized for demo)
         turn_index = 0
         for agent_name in self.COUNCIL_AGENTS:
+            logger.info(f"👤 AGENT TURN | Agent: {agent_name} | Turn: {turn_index} | Mode: council")
+
             # Build messages for this agent
             system_prompt = f"""Jesteś {agent_name} uczestniczącym w współpracującej dyskusji o przeglądzie kodu.
 
@@ -192,13 +194,26 @@ WAŻNE: Odpowiadaj TYLKO po polsku. Maksymalnie 3-4 zdania."""
                 LLMMessage(role="user", content=f"Kontekst kodu:\n{context}\n\nPodziel się swoją analizą:")
             ]
 
+            logger.debug(
+                f"📝 AGENT PROMPT | Agent: {agent_name} | "
+                f"System prompt length: {len(system_prompt)} | "
+                f"Context length: {len(context)} | "
+                f"History length: {len(self._get_conversation_history(conversation))}"
+            )
+
             # Generate response
-            response, _, _ = await provider_router.generate(
+            response, used_provider, used_model = await provider_router.generate(
                 messages=messages,
                 provider_name=provider_name,
                 model=model,
                 temperature=0.3,  # Some creativity for discussion
                 max_tokens=512  # Reduced for faster responses
+            )
+
+            logger.info(
+                f"✅ AGENT RESPONSE | Agent: {agent_name} | "
+                f"Provider: {used_provider} | Model: {used_model} | "
+                f"Response length: {len(response)} chars"
             )
 
             # Store message
