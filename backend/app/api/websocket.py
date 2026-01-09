@@ -1,0 +1,68 @@
+"""WebSocket API endpoints for real-time updates."""
+import logging
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from jose import JWTError, jwt
+from app.config import settings
+from app.utils.websocket import ws_manager
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["websocket"])
+
+
+def verify_ws_token(token: str) -> dict | None:
+    """Verify JWT token for WebSocket connection.
+
+    Args:
+        token: JWT token
+
+    Returns:
+        Token payload if valid, None otherwise
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm]
+        )
+        return payload
+    except JWTError:
+        return None
+
+
+@router.websocket("/ws/reviews/{review_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    review_id: int,
+    token: str = Query(...)
+):
+    """WebSocket endpoint for real-time review updates.
+
+    Args:
+        websocket: WebSocket connection
+        review_id: Review ID to subscribe to
+        token: JWT token for authentication
+    """
+    # Verify token
+    payload = verify_ws_token(token)
+    if not payload:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    # Connect to the review
+    await ws_manager.connect(websocket, review_id)
+
+    try:
+        # Keep connection alive and handle incoming messages
+        while True:
+            # Wait for messages (ping/pong or client disconnect)
+            data = await websocket.receive_text()
+            # Handle ping
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, review_id)
+        logger.info(f"Client disconnected from review {review_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for review {review_id}: {e}")
+        ws_manager.disconnect(websocket, review_id)
