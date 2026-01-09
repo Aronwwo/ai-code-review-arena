@@ -129,7 +129,15 @@ export function getProviders(): CustomProvider[] {
   const builtInWithUpdates = BUILT_IN_PROVIDERS.map(builtIn => {
     const updated = customProviders.find(p => p.id === builtIn.id);
     if (updated) {
-      return { ...builtIn, ...updated, isBuiltIn: true };
+      // Merge carefully - keep built-in models for non-Ollama providers
+      const merged = { ...builtIn, ...updated, isBuiltIn: true };
+
+      // For non-Ollama providers, always use built-in models (don't let them get overwritten)
+      if (builtIn.id !== 'ollama' && builtIn.models.length > 0) {
+        merged.models = builtIn.models;
+      }
+
+      return merged;
     }
     return builtIn;
   });
@@ -148,6 +156,14 @@ function saveProviders(providers: CustomProvider[]) {
     // Dla wbudowanych - zapisuj tylko jeśli zmienione
     const original = BUILT_IN_PROVIDERS.find(b => b.id === p.id);
     if (!original) return true;
+
+    // Dla Ollama - zawsze zapisuj modele (ładowane dynamicznie)
+    if (p.id === 'ollama') {
+      return p.apiKey !== original.apiKey ||
+             p.baseUrl !== original.baseUrl ||
+             p.models.length > 0; // Zapisz jeśli ma modele
+    }
+
     return p.apiKey !== original.apiKey ||
            JSON.stringify(p.models) !== JSON.stringify(original.models) ||
            p.baseUrl !== original.baseUrl;

@@ -84,7 +84,7 @@ export function ReviewConfigDialog({
   });
 
   // Fetch Ollama models
-  const { data: ollamaModelsData, isLoading: modelsLoading } = useQuery<OllamaModelsResponse>({
+  const { data: ollamaModelsData, isLoading: modelsLoading, refetch: refetchOllama } = useQuery<OllamaModelsResponse>({
     queryKey: ['ollama-models'],
     queryFn: async () => {
       try {
@@ -95,7 +95,8 @@ export function ReviewConfigDialog({
       }
     },
     enabled: open,
-    staleTime: 60000,
+    staleTime: 0, // Always fetch fresh data when dialog opens
+    refetchOnMount: 'always',
   });
 
   const ollamaModels = ollamaModelsData?.models || [];
@@ -103,9 +104,38 @@ export function ReviewConfigDialog({
   // Aktualizuj providerów gdy załadują się modele Ollama
   useEffect(() => {
     if (ollamaModels && ollamaModels.length > 0) {
-      setProviders(prev => prev.map(p =>
-        p.id === 'ollama' ? { ...p, models: ollamaModels } : p
-      ));
+      setProviders(prev => {
+        const updated = prev.map(p =>
+          p.id === 'ollama' ? { ...p, models: ollamaModels } : p
+        );
+
+        // Update localStorage for Ollama provider
+        const saved = localStorage.getItem('custom_providers');
+        const customProviders = saved ? JSON.parse(saved) : [];
+
+        // Update or add Ollama to localStorage
+        const ollamaIndex = customProviders.findIndex((p: any) => p.id === 'ollama');
+        const ollamaProvider = updated.find(p => p.id === 'ollama');
+
+        if (ollamaProvider) {
+          const ollamaToSave = {
+            id: ollamaProvider.id,
+            models: ollamaProvider.models,
+            apiKey: ollamaProvider.apiKey,
+            baseUrl: ollamaProvider.baseUrl,
+          };
+
+          if (ollamaIndex >= 0) {
+            customProviders[ollamaIndex] = ollamaToSave;
+          } else {
+            customProviders.push(ollamaToSave);
+          }
+
+          localStorage.setItem('custom_providers', JSON.stringify(customProviders));
+        }
+
+        return updated;
+      });
     }
   }, [ollamaModels]);
 
