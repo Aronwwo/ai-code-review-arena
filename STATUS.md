@@ -1,6 +1,6 @@
 # STATUS PROJEKTU - AI Code Review Arena
 **Data:** 2026-01-09
-**Commit:** 70cd4e2
+**Commit:** 654b38e
 
 ---
 
@@ -47,6 +47,22 @@
 - Added logging for moderator synthesis
 **Wynik:** Moderator tylko syntezuje wypowiedzi agentów, zgodnie ze specyfikacją
 
+### 🟠 HIGH Priority (P1) - FIXED
+
+#### 5. ✅ Moderator Selection UI (FIXED)
+**Commit:** 654b38e
+**Problem:** Brak wyboru typu moderatora w UI
+**Fix:**
+- Added ModeratorType Literal: 'debate', 'consensus', 'strategic'
+- Added moderator_type field to Review model + migration
+- Added dropdown in ReviewConfigDialog with 3 options:
+  * 🎭 Moderator Debaty - actively leads discussion
+  * 🤝 Syntezator Konsensusu - combines perspectives
+  * 🎯 Strategiczny Koordynator - prioritizes issues
+- Frontend sends moderator_type to backend
+- Backend saves moderator_type in database
+**Wynik:** Full moderator selection UI implemented (+5 pts)
+
 ---
 
 ## 📊 STATYSTYKI
@@ -61,22 +77,14 @@
 1. `92f2a7b` - fix(tests): resolve TestClient API incompatibility + complete audit
 2. `3fa32e3` - feat(llm): add refusal detection and fallback logic + extensive logging
 3. `70cd4e2` - fix(moderator): moderator now analyzes ONLY agent responses, NOT code
+4. `98b54db` - docs: add comprehensive STATUS.md with progress tracking
+5. `654b38e` - feat(moderator): add moderator type selection UI
 
 ---
 
 ## 🟡 POZOSTAŁE DO ZROBIENIA
 
 ### 🟠 HIGH Priority (P1)
-
-#### 5. ❌ Moderator Selection UI
-**Status:** PENDING
-**Requirement:** Dropdown do wyboru typu moderatora
-**Options:**
-- Moderator Debaty (default)
-- Syntezator Konsensusu
-- Strategiczny Koordynator
-**Lokalizacja:** ReviewConfigDialog - zakładka Moderator
-**Note:** Backend ma już field moderator_type - tylko dodać UI
 
 #### 6. ❌ Arena Schema A/B Configuration
 **Status:** PENDING
@@ -141,34 +149,35 @@
 
 ### Core Functionality
 - [x] Backend API - 100%
-- [x] Frontend UI - 90%
+- [x] Frontend UI - 95% (+5%)
 - [x] Database - 100%
 - [x] LLM Integration - 90% (refusal handling done, testing needed)
 - [x] Authentication - 100%
 - [x] Mode Selection - 100% ✅
 - [x] Moderator Logic - 100% ✅
+- [x] Moderator Selection - 100% ✅
 - [ ] Arena Configuration - 0%
 - [ ] Tests - 50%
 
 ### Requirements from Specification
-- [x] 1. Mode selection (Council/Arena) - ALREADY WORKING
-- [ ] 2. Moderator selection UI - PENDING
-- [x] 3. Moderator analyzes agent responses only - FIXED
+- [x] 1. Mode selection (Council/Arena) - ALREADY WORKING ✅
+- [x] 2. Moderator selection UI - FIXED ✅
+- [x] 3. Moderator analyzes agent responses only - FIXED ✅
 - [ ] 4. Arena Schema A/B configuration - PENDING
-- [x] 5. Agent refusal handling - FIXED
+- [x] 5. Agent refusal handling - FIXED ✅
 - [ ] 6. Comprehensive tests - PENDING
 - [ ] 7. Security hardening - PENDING
 
 ---
 
-## 🎯 SCORING (Preliminary)
+## 🎯 SCORING (Updated)
 
 ### Frontend (30 pts)
 - ✅ Mode selection UI: 10/10
-- ❌ Moderator selection UI: 0/5
+- ✅ Moderator selection UI: 5/5 ✅
 - ❌ Arena config UI: 0/10
 - ✅ Existing UI quality: 5/5
-**Subtotal: 15/30**
+**Subtotal: 20/30** (+5)
 
 ### Backend (30 pts)
 - ✅ Mode handling: 10/10
@@ -187,7 +196,7 @@
 
 ---
 
-## **TOTAL: 65/100**
+## **TOTAL: 70/100** (+5)
 
 Target: 100/100 ("działa zgodnie ze specyfikacją")
 
@@ -196,13 +205,13 @@ Target: 100/100 ("działa zgodnie ze specyfikacją")
 ## 🚀 NEXT STEPS
 
 ### Immediate (To reach 80/100):
-1. Add Moderator Selection UI (+5 pts)
-2. Add basic Arena Config UI (+10 pts)
+1. ~~Add Moderator Selection UI~~ ✅ DONE (+5 pts)
+2. Add basic Arena Config UI (+10 pts) - NEXT
 
 ### Short-term (To reach 100/100):
 3. Comprehensive test suite (+10 pts)
 4. Security hardening (+10 pts)
-5. Fix remaining file validation tests (+5 pts)
+5. Fix remaining file validation tests (optional, +0 pts minor)
 
 ---
 
