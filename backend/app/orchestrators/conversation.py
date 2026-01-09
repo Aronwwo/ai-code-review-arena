@@ -51,7 +51,7 @@ Bądź dokładny i przekonujący:
 
 Pozostań jednak profesjonalny i oparty na faktach. Twoim celem jest prawda, a nie zwycięstwo za wszelką cenę.
 
-WAŻNE: Odpowiadaj TYLKO po polsku."""
+WAŻNE: Odpowiadaj TYLKO po polsku. Bądź zwięzły - maksymalnie 4-5 zdań."""
 
     DEFENDER_PROMPT = """Jesteś Obrońcą w debacie o przeglądzie kodu. Twoją rolą jest dostarczanie kontekstu i argumentowanie za rozsądną interpretacją problemów.
 
@@ -64,7 +64,7 @@ Rozważ czynniki łagodzące:
 
 Bądź wyważony - uznawaj prawdziwe problemy, ale dostarczaj ważny kontekst, który Prokurator może pominąć.
 
-WAŻNE: Odpowiadaj TYLKO po polsku."""
+WAŻNE: Odpowiadaj TYLKO po polsku. Bądź zwięzły - maksymalnie 4-5 zdań."""
 
     MODERATOR_ARENA_PROMPT = """Jesteś Moderatorem w debacie o przeglądzie kodu. Wysłuchałeś argumentów zarówno Prokuratora, jak i Obrońcy.
 
@@ -171,45 +171,44 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
         # Get context
         context = await self._build_context(conversation)
 
-        # Run multiple rounds of discussion
+        # Run single round of discussion (optimized for demo)
         turn_index = 0
-        for round_num in range(min(3, settings.max_conversation_turns)):
-            for agent_name in self.COUNCIL_AGENTS:
-                # Build messages for this agent
-                system_prompt = f"""Jesteś {agent_name} uczestniczącym w współpracującej dyskusji o przeglądzie kodu.
+        for agent_name in self.COUNCIL_AGENTS:
+            # Build messages for this agent
+            system_prompt = f"""Jesteś {agent_name} uczestniczącym w współpracującej dyskusji o przeglądzie kodu.
 
 Poprzedni kontekst dyskusji:
 {self._get_conversation_history(conversation)}
 
 Przedstaw swoją perspektywę na kod. Rozwijaj to, co powiedzieli inni. Bądź zwięzły, ale wnikliwy.
 
-WAŻNE: Odpowiadaj TYLKO po polsku."""
+WAŻNE: Odpowiadaj TYLKO po polsku. Maksymalnie 3-4 zdania."""
 
-                messages = [
-                    LLMMessage(role="system", content=system_prompt),
-                    LLMMessage(role="user", content=f"Kontekst kodu:\n{context}\n\nPodziel się swoją analizą:")
-                ]
+            messages = [
+                LLMMessage(role="system", content=system_prompt),
+                LLMMessage(role="user", content=f"Kontekst kodu:\n{context}\n\nPodziel się swoją analizą:")
+            ]
 
-                # Generate response
-                response, _, _ = await provider_router.generate(
-                    messages=messages,
-                    provider_name=provider_name,
-                    model=model,
-                    temperature=0.3,  # Some creativity for discussion
-                    max_tokens=1024
-                )
+            # Generate response
+            response, _, _ = await provider_router.generate(
+                messages=messages,
+                provider_name=provider_name,
+                model=model,
+                temperature=0.3,  # Some creativity for discussion
+                max_tokens=512  # Reduced for faster responses
+            )
 
-                # Store message
-                message = Message(
-                    conversation_id=conversation.id,
-                    sender_type="agent",
-                    sender_name=agent_name,
-                    turn_index=turn_index,
-                    content=response,
-                    is_summary=False
-                )
-                self.session.add(message)
-                turn_index += 1
+            # Store message
+            message = Message(
+                conversation_id=conversation.id,
+                sender_type="agent",
+                sender_name=agent_name,
+                turn_index=turn_index,
+                content=response,
+                is_summary=False
+            )
+            self.session.add(message)
+            turn_index += 1
 
         self.session.commit()
 
@@ -268,7 +267,7 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
             provider_name=provider_name,
             model=model,
             temperature=0.2,
-            max_tokens=1024
+            max_tokens=512  # Reduced for faster debate
         )
 
         prosecutor_msg = Message(
@@ -293,7 +292,7 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
             provider_name=provider_name,
             model=model,
             temperature=0.2,
-            max_tokens=1024
+            max_tokens=512  # Reduced for faster debate
         )
 
         defender_msg = Message(
@@ -340,7 +339,7 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
             provider_name=provider_name,
             model=model,
             temperature=0.0,  # Deterministic
-            max_tokens=2048
+            max_tokens=1024  # Reduced for faster synthesis
         )
 
         # Parse and store summary
@@ -405,7 +404,7 @@ Render your verdict as JSON:""")
             provider_name=provider_name,
             model=model,
             temperature=0.0,
-            max_tokens=1024
+            max_tokens=512  # Reduced for faster verdict
         )
 
         # Parse verdict and update issue
