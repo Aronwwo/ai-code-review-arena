@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 ReviewStatus = Literal["pending", "running", "completed", "failed"]
 ReviewMode = Literal["council", "combat_arena"]
+ModeratorType = Literal["debate", "consensus", "strategic"]
 IssueSeverity = Literal["info", "warning", "error"]
 IssueStatus = Literal["open", "confirmed", "dismissed", "resolved"]
 
@@ -44,6 +45,11 @@ class Review(SQLModel, table=True):
         max_length=20,
         index=True,
         description="Tryb review: 'council' (współpraca) lub 'combat_arena' (porównanie)"
+    )
+    moderator_type: str = Field(
+        default="debate",
+        max_length=20,
+        description="Typ moderatora: 'debate' (Moderator Debaty), 'consensus' (Syntezator), 'strategic' (Strategiczny)"
     )
     arena_schema_name: str | None = Field(
         default=None,
@@ -177,6 +183,10 @@ class ReviewCreate(SQLModel):
         default="council",
         description="Tryb review: 'council' (współpraca) lub 'combat_arena' (porównanie A vs B)"
     )
+    moderator_type: ModeratorType = Field(
+        default="debate",
+        description="Typ moderatora: 'debate' (Moderator Debaty), 'consensus' (Syntezator Konsensusu), 'strategic' (Strategiczny Koordynator)"
+    )
 
     # === COUNCIL MODE ===
     agent_roles: list[str] = Field(
@@ -234,6 +244,7 @@ class ReviewRead(SQLModel):
 
     # Nowe pola dla Arena
     review_mode: ReviewMode = "council"
+    moderator_type: ModeratorType = "debate"
     arena_schema_name: str | None = None
     arena_session_id: int | None = None
 

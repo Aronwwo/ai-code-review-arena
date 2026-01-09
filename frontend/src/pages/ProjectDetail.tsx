@@ -235,6 +235,7 @@ export function ProjectDetail() {
       agent_roles: enabledRoles,
       agent_configs: agentConfigs,
       conversation_mode: config.mode,
+      moderator_type: config.moderator.type,
       api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
     });
 

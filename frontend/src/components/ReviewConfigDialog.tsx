@@ -29,6 +29,7 @@ interface ReviewConfig {
   moderator: {
     provider: string;
     model: string;
+    type: 'debate' | 'consensus' | 'strategic';
   };
   mode: 'council' | 'arena';
 }
@@ -79,7 +80,7 @@ export function ReviewConfigDialog({
       performance: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
       style: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
-    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', type: 'debate' },
     mode: 'council',  // Default to council for now - user can change in Mode tab
   });
 
@@ -180,7 +181,7 @@ export function ReviewConfigDialog({
     }));
   };
 
-  const updateModerator = (updates: Partial<{ provider: string; model: string }>) => {
+  const updateModerator = (updates: Partial<{ provider: string; model: string; type: 'debate' | 'consensus' | 'strategic' }>) => {
     setConfig(prev => ({
       ...prev,
       moderator: { ...prev.moderator, ...updates },
@@ -375,6 +376,25 @@ export function ReviewConfigDialog({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Moderator Type Selection */}
+                <div className="space-y-2">
+                  <Label>Typ Moderatora</Label>
+                  <select
+                    className="w-full p-2 border rounded-md bg-background"
+                    value={config.moderator.type}
+                    onChange={(e) => updateModerator({ type: e.target.value as 'debate' | 'consensus' | 'strategic' })}
+                  >
+                    <option value="debate">Moderator Debaty</option>
+                    <option value="consensus">Syntezator Konsensusu</option>
+                    <option value="strategic">Strategiczny Koordynator</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {config.moderator.type === 'debate' && '🎭 Aktywnie prowadzi dyskusję, zadaje pytania, rozstrzyga spory'}
+                    {config.moderator.type === 'consensus' && '🤝 Łączy różne perspektywy w spójne rekomendacje'}
+                    {config.moderator.type === 'strategic' && '🎯 Priorytetyzuje problemy, planuje kolejność działań'}
+                  </p>
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Provider</Label>

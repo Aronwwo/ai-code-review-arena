@@ -97,11 +97,14 @@ async def create_review(
             review_mode = "council"
 
     # === TWORZENIE COUNCIL REVIEW ===
+    moderator_type = review_data.moderator_type or "debate"
+
     review = Review(
         project_id=project_id,
         created_by=current_user.id,
         status="pending",
-        review_mode=review_mode  # "council"
+        review_mode=review_mode,  # "council"
+        moderator_type=moderator_type  # "debate", "consensus", or "strategic"
     )
     session.add(review)
     session.commit()
