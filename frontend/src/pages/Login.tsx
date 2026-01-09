@@ -24,7 +24,13 @@ export function Login() {
       toast.success('Zalogowano pomyślnie!');
       navigate('/projects');
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Logowanie nie powiodło się');
+      // Don't show error toast for 401 during login - wrong credentials are expected
+      if (error.response?.status !== 401) {
+        toast.error(error.response?.data?.detail || 'Logowanie nie powiodło się');
+      } else {
+        // For 401 on login, show specific message about wrong credentials
+        toast.error('Nieprawidłowy email lub hasło');
+      }
     } finally {
       setIsLoading(false);
     }

@@ -127,6 +127,14 @@ export function ProjectDetail() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check file size (max 10MB)
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > MAX_SIZE) {
+      toast.error(`Plik jest za duży. Maksymalnie 10MB (obecny: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      e.target.value = ''; // Reset file input
+      return;
+    }
+
     const extension = file.name.split('.').pop()?.toLowerCase();
     const languageMap: Record<string, string> = {
       py: 'python', js: 'javascript', ts: 'typescript', tsx: 'typescript',

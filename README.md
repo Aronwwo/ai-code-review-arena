@@ -16,7 +16,23 @@ A production-quality web application that provides multi-agent AI code review wi
 - 📊 **Persistence**: SQLite (default) or PostgreSQL with Redis caching
 - ✅ **Tested**: Comprehensive backend and frontend tests
 
-## Quick Start (One Command)```bash# Install dependencies + seed admin + run migrationsnpm run setup# Start both frontend and backendnpm run dev```**Admin Credentials:** admin@local.test / Admin123!**URLs:**- Frontend: http://localhost:5173- Backend: http://localhost:8000- API Docs: http://localhost:8000/docs
+## Quick Start (One Command)
+
+```bash
+# Install dependencies + seed admin + run migrations
+npm run setup
+
+# Start both frontend and backend
+npm run dev
+```
+
+**Admin Credentials:** admin@local.test / Admin123!
+
+**URLs:**
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
 ## Quick Start (10 Minutes)
 
 ### Prerequisites

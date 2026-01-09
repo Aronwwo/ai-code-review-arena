@@ -59,7 +59,10 @@ export function Register() {
       toast.success('Konto utworzone pomyślnie!');
       navigate('/projects');
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Rejestracja nie powiodła się');
+      // Don't show error toast for 401 - interceptor handles redirect to login
+      if (error.response?.status !== 401) {
+        toast.error(error.response?.data?.detail || 'Rejestracja nie powiodła się');
+      }
     } finally {
       setIsLoading(false);
     }

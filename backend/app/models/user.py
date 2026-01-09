@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
+from pydantic import EmailStr
 
 if TYPE_CHECKING:
     from app.models.project import Project
@@ -32,7 +33,7 @@ class User(SQLModel, table=True):
 class UserCreate(SQLModel):
     """Schema for user registration."""
 
-    email: str = Field(max_length=255)
+    email: EmailStr  # Validates email format automatically
     username: str = Field(min_length=3, max_length=100)
     password: str = Field(min_length=8, max_length=100)
 
@@ -40,7 +41,7 @@ class UserCreate(SQLModel):
 class UserLogin(SQLModel):
     """Schema for user login."""
 
-    email: str
+    email: EmailStr  # Validates email format automatically
     password: str
 
 

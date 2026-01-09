@@ -222,7 +222,10 @@ export function Settings() {
       setNewPassword('');
       setConfirmNewPassword('');
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Nie udało się zmienić hasła');
+      // Don't show error toast for 401 - interceptor handles redirect to login
+      if (error.response?.status !== 401) {
+        toast.error(error.response?.data?.detail || 'Nie udało się zmienić hasła');
+      }
     } finally {
       setIsChangingPassword(false);
     }
