@@ -19,6 +19,13 @@ interface AgentConfig {
   model: string;
 }
 
+interface ArenaSchemaConfig {
+  general: { provider: string; model: string };
+  security: { provider: string; model: string };
+  performance: { provider: string; model: string };
+  style: { provider: string; model: string };
+}
+
 interface ReviewConfig {
   agents: {
     general: AgentConfig;
@@ -32,6 +39,8 @@ interface ReviewConfig {
     type: 'debate' | 'consensus' | 'strategic';
   };
   mode: 'council' | 'arena';
+  arena_schema_a: ArenaSchemaConfig;
+  arena_schema_b: ArenaSchemaConfig;
 }
 
 interface OllamaModelsResponse {
@@ -82,6 +91,18 @@ export function ReviewConfigDialog({
     },
     moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', type: 'debate' },
     mode: 'council',  // Default to council for now - user can change in Mode tab
+    arena_schema_a: {
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+    },
+    arena_schema_b: {
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+    },
   });
 
   // Fetch Ollama models
@@ -154,6 +175,18 @@ export function ReviewConfigDialog({
           style: { ...prev.agents.style, model: ollamaModels.includes(prev.agents.style.model) ? prev.agents.style.model : defaultModel },
         },
         moderator: { ...prev.moderator, model: ollamaModels.includes(prev.moderator.model) ? prev.moderator.model : defaultModel },
+        arena_schema_a: {
+          general: { ...prev.arena_schema_a.general, model: defaultModel },
+          security: { ...prev.arena_schema_a.security, model: defaultModel },
+          performance: { ...prev.arena_schema_a.performance, model: defaultModel },
+          style: { ...prev.arena_schema_a.style, model: defaultModel },
+        },
+        arena_schema_b: {
+          general: { ...prev.arena_schema_b.general, model: defaultModel },
+          security: { ...prev.arena_schema_b.security, model: defaultModel },
+          performance: { ...prev.arena_schema_b.performance, model: defaultModel },
+          style: { ...prev.arena_schema_b.style, model: defaultModel },
+        },
       }));
     }
   }, [ollamaModels]);
@@ -185,6 +218,21 @@ export function ReviewConfigDialog({
     setConfig(prev => ({
       ...prev,
       moderator: { ...prev.moderator, ...updates },
+    }));
+  };
+
+  const updateArenaSchema = (
+    schema: 'a' | 'b',
+    role: keyof ArenaSchemaConfig,
+    updates: Partial<{ provider: string; model: string }>
+  ) => {
+    const schemaKey = schema === 'a' ? 'arena_schema_a' : 'arena_schema_b';
+    setConfig(prev => ({
+      ...prev,
+      [schemaKey]: {
+        ...prev[schemaKey],
+        [role]: { ...prev[schemaKey][role], ...updates },
+      },
     }));
   };
 
@@ -253,11 +301,21 @@ export function ReviewConfigDialog({
           </div>
         )}
 
-        <Tabs defaultValue="agents" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="agents">Agenci ({enabledAgentCount}/4)</TabsTrigger>
-            <TabsTrigger value="moderator">Moderator</TabsTrigger>
+        <Tabs defaultValue="mode" className="mt-4">
+          <TabsList className={`grid w-full ${config.mode === 'arena' ? 'grid-cols-3' : 'grid-cols-3'}`}>
             <TabsTrigger value="mode">Tryb Dyskusji</TabsTrigger>
+            {config.mode === 'council' && (
+              <>
+                <TabsTrigger value="agents">Agenci ({enabledAgentCount}/4)</TabsTrigger>
+                <TabsTrigger value="moderator">Moderator</TabsTrigger>
+              </>
+            )}
+            {config.mode === 'arena' && (
+              <>
+                <TabsTrigger value="schema-a">Schema A</TabsTrigger>
+                <TabsTrigger value="schema-b">Schema B</TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {/* Agents Tab */}
@@ -491,12 +549,177 @@ export function ReviewConfigDialog({
               </Card>
             </div>
           </TabsContent>
+
+          {/* Arena Schema A Tab */}
+          <TabsContent value="schema-a" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Schema A - Konfiguracja Agentów</CardTitle>
+                    <CardDescription>
+                      Wybierz provider i model dla każdej roli w Schemacie A
+                    </CardDescription>
+                  </div>
+                  <Badge variant="secondary">A</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {AGENT_ROLES.map((role) => {
+                    const Icon = role.icon;
+                    const schemaConfig = config.arena_schema_a[role.id as keyof ArenaSchemaConfig];
+                    const models = getModelsForProvider(schemaConfig.provider);
+
+                    return (
+                      <Card key={role.id} className="p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Icon className={`h-5 w-5 ${role.color}`} />
+                          <div>
+                            <div className="font-semibold text-sm">{role.name}</div>
+                            <div className="text-xs text-muted-foreground">{role.description}</div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Provider</Label>
+                            <select
+                              className="w-full p-2 border rounded-md text-sm bg-background"
+                              value={schemaConfig.provider}
+                              onChange={(e) => {
+                                const newProvider = e.target.value;
+                                const newModels = getModelsForProvider(newProvider);
+                                updateArenaSchema('a', role.id as keyof ArenaSchemaConfig, {
+                                  provider: newProvider,
+                                  model: newModels[0] || ''
+                                });
+                              }}
+                            >
+                              {providers.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Model</Label>
+                            {modelsLoading && schemaConfig.provider === 'ollama' ? (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Ładowanie...
+                              </div>
+                            ) : models.length > 0 ? (
+                              <select
+                                className="w-full p-2 border rounded-md text-sm bg-background"
+                                value={schemaConfig.model}
+                                onChange={(e) => updateArenaSchema('a', role.id as keyof ArenaSchemaConfig, { model: e.target.value })}
+                              >
+                                {models.map((m) => (
+                                  <option key={m} value={m}>{m}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">Brak modeli</div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Arena Schema B Tab */}
+          <TabsContent value="schema-b" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Schema B - Konfiguracja Agentów</CardTitle>
+                    <CardDescription>
+                      Wybierz provider i model dla każdej roli w Schemacie B
+                    </CardDescription>
+                  </div>
+                  <Badge variant="secondary">B</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {AGENT_ROLES.map((role) => {
+                    const Icon = role.icon;
+                    const schemaConfig = config.arena_schema_b[role.id as keyof ArenaSchemaConfig];
+                    const models = getModelsForProvider(schemaConfig.provider);
+
+                    return (
+                      <Card key={role.id} className="p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Icon className={`h-5 w-5 ${role.color}`} />
+                          <div>
+                            <div className="font-semibold text-sm">{role.name}</div>
+                            <div className="text-xs text-muted-foreground">{role.description}</div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Provider</Label>
+                            <select
+                              className="w-full p-2 border rounded-md text-sm bg-background"
+                              value={schemaConfig.provider}
+                              onChange={(e) => {
+                                const newProvider = e.target.value;
+                                const newModels = getModelsForProvider(newProvider);
+                                updateArenaSchema('b', role.id as keyof ArenaSchemaConfig, {
+                                  provider: newProvider,
+                                  model: newModels[0] || ''
+                                });
+                              }}
+                            >
+                              {providers.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Model</Label>
+                            {modelsLoading && schemaConfig.provider === 'ollama' ? (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Ładowanie...
+                              </div>
+                            ) : models.length > 0 ? (
+                              <select
+                                className="w-full p-2 border rounded-md text-sm bg-background"
+                                value={schemaConfig.model}
+                                onChange={(e) => updateArenaSchema('b', role.id as keyof ArenaSchemaConfig, { model: e.target.value })}
+                              >
+                                {models.map((m) => (
+                                  <option key={m} value={m}>{m}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">Brak modeli</div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         <DialogFooter className="mt-6">
           <div className="flex items-center justify-between w-full">
             <div className="text-sm text-muted-foreground">
-              {fileCount} plik(ów) • {Math.round(totalCodeSize / 1024)} KB kodu • {enabledAgentCount} agentów
+              {fileCount} plik(ów) • {Math.round(totalCodeSize / 1024)} KB kodu •
+              {config.mode === 'council' ? ` ${enabledAgentCount} agentów` : ' Arena Mode'}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -504,7 +727,7 @@ export function ReviewConfigDialog({
               </Button>
               <Button
                 onClick={handleStartReview}
-                disabled={isLoading || enabledAgentCount === 0 || fileCount === 0}
+                disabled={isLoading || (config.mode === 'council' && enabledAgentCount === 0) || fileCount === 0}
               >
                 {isLoading ? (
                   <>
@@ -512,7 +735,7 @@ export function ReviewConfigDialog({
                     Uruchamianie...
                   </>
                 ) : (
-                  <>Rozpocznij Review</>
+                  <>{config.mode === 'arena' ? 'Rozpocznij Arena' : 'Rozpocznij Review'}</>
                 )}
               </Button>
             </div>

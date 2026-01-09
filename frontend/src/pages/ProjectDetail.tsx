@@ -173,7 +173,7 @@ export function ProjectDetail() {
     });
   };
 
-  const handleStartReview = (config: any) => {
+  const handleStartReview = async (config: any) => {
     // Get all providers (including custom ones)
     const providers = getProviders();
 
@@ -231,13 +231,33 @@ export function ProjectDetail() {
       custom_provider: moderatorCustomProvider,
     };
 
-    startReviewMutation.mutate({
-      agent_roles: enabledRoles,
-      agent_configs: agentConfigs,
-      conversation_mode: config.mode,
-      moderator_type: config.moderator.type,
-      api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
-    });
+    // Route based on mode
+    if (config.mode === 'arena') {
+      // Arena mode - send to POST /arena/sessions
+      try {
+        const response = await api.post('/arena/sessions', {
+          project_id: parseInt(id || '0'),
+          schema_a_config: config.arena_schema_a,
+          schema_b_config: config.arena_schema_b,
+          api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
+        });
+
+        queryClient.invalidateQueries({ queryKey: ['arena-sessions'] });
+        toast.success('Arena session started!');
+        navigate(`/arena/sessions/${response.data.id}`);
+      } catch (error: any) {
+        toast.error(error.response?.data?.detail || 'Failed to start Arena session');
+      }
+    } else {
+      // Council mode - send to POST /projects/{id}/reviews
+      startReviewMutation.mutate({
+        agent_roles: enabledRoles,
+        agent_configs: agentConfigs,
+        conversation_mode: config.mode,
+        moderator_type: config.moderator.type,
+        api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
+      });
+    }
 
     setIsReviewConfigOpen(false);
   };
