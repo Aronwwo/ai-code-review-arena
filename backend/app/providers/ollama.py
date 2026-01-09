@@ -45,8 +45,9 @@ class OllamaProvider(LLMProvider):
             data = response.json()
             models = data.get("models", [])
 
-            # Extract model names
-            return [model.get("name", "").split(":")[0] for model in models if model.get("name")]
+            # Extract full model names WITH tags (e.g., "qwen2.5-coder:1.5b")
+            # Ollama requires the tag to be included in API calls
+            return [model.get("name", "") for model in models if model.get("name")]
 
     async def generate(
         self,
