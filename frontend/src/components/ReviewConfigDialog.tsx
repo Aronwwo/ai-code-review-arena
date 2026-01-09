@@ -80,7 +80,7 @@ export function ReviewConfigDialog({
       style: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
     moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-    mode: 'council',
+    mode: 'council',  // Default to council for now - user can change in Mode tab
   });
 
   // Fetch Ollama models

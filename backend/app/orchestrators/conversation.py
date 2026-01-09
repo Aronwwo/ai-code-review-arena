@@ -85,6 +85,9 @@ WAŻNE: Pole "moderator_comment" musi być po polsku. Zwróć TYLKO poprawny JSO
 
     MODERATOR_COUNCIL_PROMPT = """Jesteś Moderatorem syntetyzującym dyskusję rady. Agenci przedyskutowali kod z różnych perspektyw.
 
+WAŻNE: NIE analizujesz kodu bezpośrednio. Twoje zadanie to TYLKO synteza wypowiedzi agentów.
+Bazuj WYŁĄCZNIE na tym co powiedzieli agenci - nie dodawaj własnych obserwacji o kodzie.
+
 Zsyntetyzuj ich spostrzeżenia w ustrukturyzowane podsumowanie JSON:
 {
   "issues": [
@@ -339,18 +342,25 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
     ):
         """Generate moderator synthesis for council mode.
 
+        IMPORTANT: Moderator ONLY analyzes agent discussions, NOT code directly.
+        The moderator synthesizes insights from agent perspectives into structured output.
+
         Args:
             conversation: Conversation object
-            context: Code context
+            context: Code context (NOT used by moderator - only for reference)
             provider_name: LLM provider
             model: Model name
         """
         discussion_history = self._get_conversation_history(conversation)
 
+        # FIXED: Moderator receives ONLY agent discussions, NOT code
+        # This follows specification requirement: "Moderator NIE analizuje kodu bezpośrednio"
         messages = [
             LLMMessage(role="system", content=self.MODERATOR_COUNCIL_PROMPT),
-            LLMMessage(role="user", content=f"Kontekst kodu:\n{context}\n\nDyskusja:\n{discussion_history}\n\nDostarcz swoją syntezę w formacie JSON:")
+            LLMMessage(role="user", content=f"Dyskusja agentów:\n{discussion_history}\n\nDostarcz swoją syntezę w formacie JSON:")
         ]
+
+        logger.info(f"🎭 MODERATOR SYNTHESIS | Mode: council | Discussion length: {len(discussion_history)} chars")
 
         response, _, _ = await provider_router.generate(
             messages=messages,
