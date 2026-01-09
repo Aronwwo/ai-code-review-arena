@@ -1,6 +1,6 @@
 # STATUS PROJEKTU - AI Code Review Arena
 **Data:** 2026-01-09
-**Commit:** 654b38e
+**Commit:** 009c77b
 
 ---
 
@@ -63,6 +63,18 @@
 - Backend saves moderator_type in database
 **Wynik:** Full moderator selection UI implemented (+5 pts)
 
+#### 6. ✅ Arena Schema A/B Configuration (FIXED)
+**Commit:** 009c77b
+**Problem:** Brak osobnego flow dla Arena mode z konfiguracją Schema A i B
+**Fix:**
+- Added ArenaSchemaConfig interface for 4-role configuration (general, security, performance, style)
+- Dynamic tabs in ReviewConfigDialog: Council mode (Mode → Agents → Moderator) vs Arena mode (Mode → Schema A → Schema B)
+- Complete Schema A and Schema B tabs with provider/model selection for each role
+- Mode-based routing in ProjectDetail: Arena → POST /arena/sessions, Council → POST /projects/{id}/reviews
+- Arena mode sends schema_a_config and schema_b_config to backend
+- Updated button text and footer to reflect Arena vs Council mode
+**Wynik:** Full Arena configuration UI implemented (+10 pts)
+
 ---
 
 ## 📊 STATYSTYKI
@@ -79,24 +91,11 @@
 3. `70cd4e2` - fix(moderator): moderator now analyzes ONLY agent responses, NOT code
 4. `98b54db` - docs: add comprehensive STATUS.md with progress tracking
 5. `654b38e` - feat(moderator): add moderator type selection UI
+6. `009c77b` - feat(arena): add Arena Schema A/B configuration UI
 
 ---
 
 ## 🟡 POZOSTAŁE DO ZROBIENIA
-
-### 🟠 HIGH Priority (P1)
-
-#### 6. ❌ Arena Schema A/B Configuration
-**Status:** PENDING
-**Requirement:** Osobny flow dla Arena mode
-- Step 1: Mode selection (jeśli Arena)
-- Step 2: Configure Schema A (4 roles: provider+model każdy)
-- Step 3: Configure Schema B (4 roles: provider+model każdy)
-- Step 4: Confirm & Start
-**Lokalizacja:** Nowy komponent ArenaConfigDialog
-**Backend:** POST /arena/sessions endpoint już istnieje
-
----
 
 ### 🟡 MEDIUM Priority (P2)
 
@@ -149,21 +148,21 @@
 
 ### Core Functionality
 - [x] Backend API - 100%
-- [x] Frontend UI - 95% (+5%)
+- [x] Frontend UI - 100% ✅
 - [x] Database - 100%
 - [x] LLM Integration - 90% (refusal handling done, testing needed)
 - [x] Authentication - 100%
 - [x] Mode Selection - 100% ✅
 - [x] Moderator Logic - 100% ✅
 - [x] Moderator Selection - 100% ✅
-- [ ] Arena Configuration - 0%
+- [x] Arena Configuration - 100% ✅
 - [ ] Tests - 50%
 
 ### Requirements from Specification
 - [x] 1. Mode selection (Council/Arena) - ALREADY WORKING ✅
 - [x] 2. Moderator selection UI - FIXED ✅
 - [x] 3. Moderator analyzes agent responses only - FIXED ✅
-- [ ] 4. Arena Schema A/B configuration - PENDING
+- [x] 4. Arena Schema A/B configuration - FIXED ✅
 - [x] 5. Agent refusal handling - FIXED ✅
 - [ ] 6. Comprehensive tests - PENDING
 - [ ] 7. Security hardening - PENDING
@@ -175,9 +174,9 @@
 ### Frontend (30 pts)
 - ✅ Mode selection UI: 10/10
 - ✅ Moderator selection UI: 5/5 ✅
-- ❌ Arena config UI: 0/10
+- ✅ Arena config UI: 10/10 ✅
 - ✅ Existing UI quality: 5/5
-**Subtotal: 20/30** (+5)
+**Subtotal: 30/30** ✅
 
 ### Backend (30 pts)
 - ✅ Mode handling: 10/10
@@ -196,7 +195,7 @@
 
 ---
 
-## **TOTAL: 70/100** (+5)
+## **TOTAL: 80/100** ✅
 
 Target: 100/100 ("działa zgodnie ze specyfikacją")
 
@@ -204,12 +203,12 @@ Target: 100/100 ("działa zgodnie ze specyfikacją")
 
 ## 🚀 NEXT STEPS
 
-### Immediate (To reach 80/100):
+### Immediate (To reach 90/100):
 1. ~~Add Moderator Selection UI~~ ✅ DONE (+5 pts)
-2. Add basic Arena Config UI (+10 pts) - NEXT
+2. ~~Add basic Arena Config UI~~ ✅ DONE (+10 pts)
+3. Comprehensive test suite (+10 pts) - NEXT
 
 ### Short-term (To reach 100/100):
-3. Comprehensive test suite (+10 pts)
 4. Security hardening (+10 pts)
 5. Fix remaining file validation tests (optional, +0 pts minor)
 
@@ -260,14 +259,17 @@ pytest tests/ --cov=app --cov-report=html
 - `backend/app/orchestrators/conversation.py` - Moderator fix + logging
 - `backend/tests/conftest.py` - TestClient fixtures
 - `backend/tests/test_auth.py` - Fixed auth tests
-- `frontend/src/components/ReviewConfigDialog.tsx` - Mode selection (verified)
+- `backend/app/models/review.py` - Moderator type field + ModeratorType Literal
+- `backend/alembic/versions/66a463fd1f4b_*.py` - Moderator type migration
+- `frontend/src/components/ReviewConfigDialog.tsx` - Mode selection, moderator type, Arena Schema A/B config
+- `frontend/src/pages/ProjectDetail.tsx` - Mode-based routing (Arena vs Council)
 
 ### Key Files for Next Tasks
-- `frontend/src/components/ReviewConfigDialog.tsx` - Add moderator selection
-- `frontend/src/components/ArenaConfigDialog.tsx` - NEW - Arena config
-- `backend/app/api/arena.py` - Arena endpoints
-- `backend/tests/test_integration.py` - NEW - Integration tests
-- `backend/app/api/files.py` - Fix file validation
+- `backend/tests/test_integration.py` - NEW - Integration tests (next priority)
+- `backend/tests/test_arena.py` - NEW - Arena E2E tests
+- `backend/tests/test_elo.py` - NEW - ELO calculation tests
+- `backend/app/api/files.py` - Fix file validation (4 failing tests)
+- `backend/app/api/*.py` - Security review (input validation, SQLi, XSS)
 
 ---
 
