@@ -42,6 +42,21 @@ export function ArenaRankings() {
   const [expandedSchemas, setExpandedSchemas] = useState<Set<number>>(new Set());
   const [minGames, setMinGames] = useState<number>(0);
 
+  // Fetch Arena Stats
+  const { data: arenaStats } = useQuery<{
+    total_votes: number;
+    unique_voters: number;
+    total_schemas: number;
+    top_schemas: Array<{schema_hash: string; elo_rating: number; games_played: number; win_rate: number}>;
+    recent_votes: Array<{session_id: number; winner: string; voted_at: string; project_id: number}>;
+  }>({
+    queryKey: ['arena-stats'],
+    queryFn: async () => {
+      const response = await api.get('/arena/stats');
+      return response.data;
+    },
+  });
+
   // Fetch Arena Schema Rankings
   const { data: schemaRankings, isLoading } = useQuery<SchemaRating[]>({
     queryKey: ['arena-rankings', minGames],
@@ -112,6 +127,45 @@ export function ArenaRankings() {
           Nowa Sesja Arena
         </Button>
       </div>
+
+      {/* Arena Stats */}
+      {arenaStats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Całkowite Głosy</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{arenaStats.total_votes}</div>
+              <p className="text-xs text-muted-foreground mt-1">Od {arenaStats.unique_voters} użytkowników</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Schematy w Rankingu</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{arenaStats.total_schemas}</div>
+              <p className="text-xs text-muted-foreground mt-1">Różnych konfiguracji</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Średni Win Rate</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">
+                {arenaStats.top_schemas.length > 0
+                  ? Math.round(arenaStats.top_schemas.reduce((sum, s) => sum + s.win_rate, 0) / arenaStats.top_schemas.length)
+                  : 0}%
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Top 3 schematów</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>

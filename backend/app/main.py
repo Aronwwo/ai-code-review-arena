@@ -70,7 +70,7 @@ app = FastAPI(
 # Domeny są konfigurowane w .env przez CORS_ORIGINS (domyślnie localhost:3000,5173)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,  # Z config.py - tylko dozwolone domeny
+    allow_origins=settings.get_cors_origins(),  # Z config.py - tylko dozwolone domeny
     allow_credentials=False,  # Nie wysyłamy cookies cross-origin
     allow_methods=["*"],  # Wszystkie metody: GET, POST, PUT, DELETE, PATCH
     allow_headers=["*"],  # Wszystkie headery (Authorization, Content-Type, etc.)

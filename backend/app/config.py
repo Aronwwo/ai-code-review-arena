@@ -59,19 +59,17 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60  # Token wygasa po 1h
 
     # ==================== CORS ====================
-    # Lista dozwolonych domen dla cross-origin requests
+    # Lista dozwolonych domen dla cross-origin requests (comma-separated)
     cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
     # Production: "https://yourdomain.com,https://www.yourdomain.com"
 
-    @field_validator("cors_origins")
-    @classmethod
-    def parse_cors_origins(cls, v: str) -> list[str]:
+    def get_cors_origins(self) -> list[str]:
         """Parse comma-separated CORS origins.
 
         Input: "http://localhost:3000,http://localhost:5173"
         Output: ["http://localhost:3000", "http://localhost:5173"]
         """
-        return [origin.strip() for origin in v.split(",")]
+        return [origin.strip() for origin in self.cors_origins.split(",")]
 
     # ==================== RATE LIMITING ====================
     rate_limit_enabled: bool = True  # Włącz rate limiting (60 req/min)

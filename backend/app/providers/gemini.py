@@ -36,7 +36,7 @@ class GeminiProvider(LLMProvider):
 
         Args:
             messages: List of conversation messages
-            model: Gemini model name (default: gemini-1.5-flash)
+            model: Gemini model name (default: gemini-2.0-flash-exp)
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
 
@@ -47,7 +47,7 @@ class GeminiProvider(LLMProvider):
             raise ValueError("Gemini API key not configured")
 
         if model is None:
-            model = "gemini-1.5-flash"
+            model = "gemini-2.0-flash-exp"  # Latest Gemini 2.0 Flash (Experimental, December 2024)
 
         # Convert messages to Gemini format
         # Gemini uses "user" and "model" roles, and combines system message into first user message

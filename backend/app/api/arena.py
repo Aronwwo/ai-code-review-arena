@@ -415,3 +415,74 @@ async def list_arena_sessions(
         )
         for arena in arena_sessions
     ]
+
+@router.get("/stats")
+async def get_arena_stats(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Pobierz globalne statystyki Arena (jak LLM Arena).
+
+    Zwraca:
+    - Całkowitą liczbę głosów
+    - Liczbę unikalnych głosujących
+    - Liczbę schematów w rankingu
+    - Ostatnie głosy
+    - Top 3 schematy
+
+    Returns:
+        Dict ze statystykami Arena
+    """
+    # Całkowita liczba sesji z głosami
+    total_votes_stmt = select(func.count(ArenaSession.id)).where(ArenaSession.winner.isnot(None))
+    total_votes = session.exec(total_votes_stmt).one()
+
+    # Liczba unikalnych głosujących
+    unique_voters_stmt = select(func.count(func.distinct(ArenaSession.voter_id))).where(ArenaSession.voter_id.isnot(None))
+    unique_voters = session.exec(unique_voters_stmt).one()
+
+    # Liczba schematów w rankingu
+    total_schemas_stmt = select(func.count(SchemaRating.id))
+    total_schemas = session.exec(total_schemas_stmt).one()
+
+    # Top 3 schematy
+    top_schemas_stmt = (
+        select(SchemaRating)
+        .where(SchemaRating.games_played >= 1)
+        .order_by(desc(SchemaRating.elo_rating))
+        .limit(3)
+    )
+    top_schemas = session.exec(top_schemas_stmt).all()
+
+    # Ostatnie 5 głosów
+    recent_votes_stmt = (
+        select(ArenaSession)
+        .where(ArenaSession.winner.isnot(None))
+        .order_by(desc(ArenaSession.voted_at))
+        .limit(5)
+    )
+    recent_votes = session.exec(recent_votes_stmt).all()
+
+    return {
+        "total_votes": total_votes,
+        "unique_voters": unique_voters,
+        "total_schemas": total_schemas,
+        "top_schemas": [
+            {
+                "schema_hash": s.schema_hash,
+                "elo_rating": round(s.elo_rating, 1),
+                "games_played": s.games_played,
+                "win_rate": round((s.wins / s.games_played * 100) if s.games_played > 0 else 0, 1)
+            }
+            for s in top_schemas
+        ],
+        "recent_votes": [
+            {
+                "session_id": v.id,
+                "winner": v.winner,
+                "voted_at": v.voted_at.isoformat() if v.voted_at else None,
+                "project_id": v.project_id
+            }
+            for v in recent_votes
+        ]
+    }
