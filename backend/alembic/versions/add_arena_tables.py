@@ -82,45 +82,46 @@ def upgrade() -> None:
     op.create_index(op.f('ix_schema_ratings_schema_hash'), 'schema_ratings', ['schema_hash'], unique=True)
 
     # === MODIFY REVIEWS TABLE ===
-    # Dodaj nowe kolumny do tabeli reviews dla obsługi Arena mode
+    # SQLite requires batch mode for ALTER operations
+    with op.batch_alter_table('reviews', schema=None) as batch_op:
+        # review_mode: 'council' (domyślny) lub 'combat_arena'
+        batch_op.add_column(
+            sa.Column('review_mode', sqlmodel.sql.sqltypes.AutoString(length=20),
+                      nullable=False, server_default='council')
+        )
+        batch_op.create_index('ix_reviews_review_mode', ['review_mode'], unique=False)
 
-    # review_mode: 'council' (domyślny) lub 'combat_arena'
-    op.add_column('reviews',
-        sa.Column('review_mode', sqlmodel.sql.sqltypes.AutoString(length=20),
-                  nullable=False, server_default='council')
-    )
-    op.create_index(op.f('ix_reviews_review_mode'), 'reviews', ['review_mode'], unique=False)
+        # arena_schema_name: 'A' lub 'B' (tylko dla combat_arena)
+        batch_op.add_column(
+            sa.Column('arena_schema_name', sqlmodel.sql.sqltypes.AutoString(length=1),
+                      nullable=True)
+        )
 
-    # arena_schema_name: 'A' lub 'B' (tylko dla combat_arena)
-    op.add_column('reviews',
-        sa.Column('arena_schema_name', sqlmodel.sql.sqltypes.AutoString(length=1),
-                  nullable=True)
-    )
-
-    # arena_session_id: FK do arena_sessions (tylko dla combat_arena)
-    op.add_column('reviews',
-        sa.Column('arena_session_id', sa.Integer(), nullable=True)
-    )
-    op.create_foreign_key(
-        'fk_reviews_arena_session_id',
-        'reviews',
-        'arena_sessions',
-        ['arena_session_id'],
-        ['id']
-    )
-    op.create_index(op.f('ix_reviews_arena_session_id'), 'reviews', ['arena_session_id'], unique=False)
+        # arena_session_id: FK do arena_sessions (tylko dla combat_arena)
+        batch_op.add_column(
+            sa.Column('arena_session_id', sa.Integer(), nullable=True)
+        )
+        batch_op.create_foreign_key(
+            'fk_reviews_arena_session_id',
+            'arena_sessions',
+            ['arena_session_id'],
+            ['id']
+        )
+        batch_op.create_index('ix_reviews_arena_session_id', ['arena_session_id'], unique=False)
 
 
 def downgrade() -> None:
     """Downgrade database schema - usuwa tabele Arena i kolumny w reviews."""
 
     # === REMOVE COLUMNS FROM REVIEWS ===
-    op.drop_index(op.f('ix_reviews_arena_session_id'), table_name='reviews')
-    op.drop_constraint('fk_reviews_arena_session_id', 'reviews', type_='foreignkey')
-    op.drop_column('reviews', 'arena_session_id')
-    op.drop_column('reviews', 'arena_schema_name')
-    op.drop_index(op.f('ix_reviews_review_mode'), table_name='reviews')
-    op.drop_column('reviews', 'review_mode')
+    # SQLite requires batch mode for ALTER operations
+    with op.batch_alter_table('reviews', schema=None) as batch_op:
+        batch_op.drop_index('ix_reviews_arena_session_id')
+        batch_op.drop_constraint('fk_reviews_arena_session_id', type_='foreignkey')
+        batch_op.drop_column('arena_session_id')
+        batch_op.drop_column('arena_schema_name')
+        batch_op.drop_index('ix_reviews_review_mode')
+        batch_op.drop_column('review_mode')
 
     # === DROP SCHEMA_RATINGS TABLE ===
     op.drop_index(op.f('ix_schema_ratings_schema_hash'), table_name='schema_ratings')

@@ -62,11 +62,21 @@ class ArenaSession(SQLModel, table=True):
     completed_at: datetime | None = None
 
     # Relationships
+    # Trzeba określić foreign_keys dla wielokrotnych relacji do User
     project: Project = Relationship()
-    created_by_user: User = Relationship()
-    voter: User = Relationship()
-    review_a: Review = Relationship()
-    review_b: Review = Relationship()
+    created_by_user: User = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.created_by]"}
+    )
+    voter: User = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.voter_id]"}
+    )
+    # Relacje do Review - również trzeba określić foreign_keys
+    review_a: Review = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.review_a_id]"}
+    )
+    review_b: Review = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.review_b_id]"}
+    )
 
 
 class SchemaRating(SQLModel, table=True):
