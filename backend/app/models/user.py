@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+import re
 from sqlmodel import Field, Relationship, SQLModel
-from pydantic import EmailStr
+from pydantic import field_validator
 
 if TYPE_CHECKING:
     from app.models.project import Project
@@ -33,16 +34,44 @@ class User(SQLModel, table=True):
 class UserCreate(SQLModel):
     """Schema for user registration."""
 
-    email: EmailStr  # Validates email format automatically
+    email: str = Field(max_length=255)
     username: str = Field(min_length=3, max_length=100)
     password: str = Field(min_length=8, max_length=100)
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        """Validate email format (accepts .test and .local for development)."""
+        if not v or '@' not in v:
+            raise ValueError('nieprawidłowy format email')
+
+        # Basic email regex that accepts .test and .local TLDs
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(pattern, v.lower()):
+            raise ValueError('nieprawidłowy format email')
+
+        return v.lower()
 
 
 class UserLogin(SQLModel):
     """Schema for user login."""
 
-    email: EmailStr  # Validates email format automatically
+    email: str = Field(max_length=255)
     password: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        """Validate email format (accepts .test and .local for development)."""
+        if not v or '@' not in v:
+            raise ValueError('nieprawidłowy format email')
+
+        # Basic email regex that accepts .test and .local TLDs
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(pattern, v.lower()):
+            raise ValueError('nieprawidłowy format email')
+
+        return v.lower()
 
 
 class UserRead(SQLModel):
