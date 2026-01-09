@@ -52,14 +52,56 @@ async def create_review(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session)
 ):
-    """Create and start a new review for a project."""
+    """Utwórz i uruchom nowy review dla projektu.
+
+    Wspiera dwa tryby:
+    1. COUNCIL MODE (domyślny): Agenci współpracują nad jednym review
+       - Podaj agent_roles i opcjonalnie agent_configs
+    2. COMBAT ARENA: Porównanie dwóch pełnych schematów (A vs B)
+       - Nie używaj tego endpoint! Użyj POST /arena/sessions zamiast tego
+
+    Args:
+        project_id: ID projektu do przeanalizowania
+        review_data: Konfiguracja review (tryb, role, konfiguracje agentów)
+        background_tasks: FastAPI BackgroundTasks
+        current_user: Zalogowany użytkownik
+        session: Sesja bazodanowa
+
+    Returns:
+        Utworzony Review (status: "pending")
+
+    Raises:
+        HTTPException 400: Jeśli tryb Arena użyty bezpośrednio
+        HTTPException 404: Jeśli projekt nie istnieje
+    """
     project = await verify_project_access(project_id, current_user, session)
 
-    # Create review
+    # === WALIDACJA TRYBU ===
+    # Arena review MUSZĄ być tworzone przez POST /arena/sessions, nie bezpośrednio
+    review_mode = review_data.review_mode or "council"
+
+    if review_mode == "combat_arena":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "Combat Arena nie może być utworzone bezpośrednio przez ten endpoint",
+                "hint": "Użyj POST /arena/sessions aby utworzyć sesję Arena",
+                "provided_mode": review_mode
+            }
+        )
+
+    # Handle deprecated conversation_mode field
+    if review_data.conversation_mode and not review_data.review_mode:
+        review_mode = review_data.conversation_mode
+        if review_mode not in ["council", "combat_arena"]:
+            review_mode = "council"
+
+    # === TWORZENIE COUNCIL REVIEW ===
     review = Review(
         project_id=project_id,
         created_by=current_user.id,
-        status="pending"
+        status="pending",
+        review_mode=review_mode  # "council"
     )
     session.add(review)
     session.commit()
