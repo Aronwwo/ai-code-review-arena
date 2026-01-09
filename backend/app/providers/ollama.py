@@ -82,21 +82,38 @@ class OllamaProvider(LLMProvider):
 
         prompt += "Assistant: "
 
-        # Make request to Ollama
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": temperature,
-                        "num_predict": max_tokens,
-                    }
-                }
-            )
-            response.raise_for_status()
+        # Make request to Ollama with retry on timeout
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            max_retries = 2
+            last_error = None
 
-            result = response.json()
-            return result["response"]
+            for attempt in range(max_retries):
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": prompt,
+                            "stream": False,
+                            "options": {
+                                "temperature": temperature,
+                                "num_predict": max_tokens,
+                            }
+                        }
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    return result["response"]
+
+                except httpx.TimeoutException as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        # Retry on timeout (except last attempt)
+                        continue
+                    # On last attempt, raise the error
+                    raise
+
+            # Should not reach here, but just in case
+            if last_error:
+                raise last_error
+            return ""

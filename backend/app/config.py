@@ -161,3 +161,14 @@ class Settings(BaseSettings):
 # Ta instancja jest używana w całej aplikacji
 # Import: from app.config import settings
 settings = Settings()  # Automatycznie ładuje wartości z .env
+
+# ==================== PRODUCTION SAFETY CHECKS ====================
+# Sprawdzenie niebezpiecznych konfiguracji w produkcji
+if settings.is_production and settings.log_level.upper() == 'DEBUG':
+    import warnings
+    warnings.warn(
+        "⚠️  WARNING: DEBUG logging is enabled in PRODUCTION! "
+        "This may expose sensitive data (passwords, tokens, API keys) in logs. "
+        "Set LOG_LEVEL=INFO in production .env file.",
+        stacklevel=2
+    )

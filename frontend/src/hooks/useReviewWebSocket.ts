@@ -125,7 +125,7 @@ export function useReviewWebSocket({
           onEvent(data);
         }
       } catch (e) {
-        console.error('Failed to parse WebSocket message:', e);
+        // Failed to parse message - ignore malformed messages
       }
     };
 
@@ -143,8 +143,8 @@ export function useReviewWebSocket({
       }
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+    ws.onerror = () => {
+      // WebSocket error - will attempt reconnect on close
     };
   }, [reviewId, enabled, onEvent, reviewStatus]);
 

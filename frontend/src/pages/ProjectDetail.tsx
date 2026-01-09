@@ -514,7 +514,11 @@ export function ProjectDetail() {
                             }}
                             disabled={deleteFileMutation.isPending}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {deleteFileMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </div>

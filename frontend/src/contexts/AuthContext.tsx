@@ -31,8 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('user', JSON.stringify(response.data));
       return response.data;
     } catch (error) {
-      // Token invalid or expired
-      console.error('Failed to fetch user:', error);
+      // Token invalid or expired - silently clear auth state
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       setToken(null);
