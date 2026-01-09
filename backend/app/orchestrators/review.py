@@ -2,7 +2,7 @@
 import json
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlmodel import Session, select, func
 from pydantic import BaseModel, ValidationError
 from app.models.project import Project
@@ -227,7 +227,7 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
 
             # Mark review as completed
             review.status = "completed"
-            review.completed_at = datetime.utcnow()
+            review.completed_at = datetime.now(UTC)
 
             # Get total issue count and send completed event
             issue_count_stmt = select(func.count(Issue.id)).where(Issue.review_id == review_id)
@@ -238,7 +238,7 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
             # Mark review as failed
             review.status = "failed"
             review.error_message = str(e)[:2000]
-            review.completed_at = datetime.utcnow()
+            review.completed_at = datetime.now(UTC)
 
             # Send failed event
             await ws_manager.send_review_failed(review_id, str(e)[:500])

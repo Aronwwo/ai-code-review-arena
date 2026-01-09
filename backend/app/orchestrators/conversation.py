@@ -1,7 +1,7 @@
 """Conversation orchestrator for agent discussions (Council and Arena modes)."""
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlmodel import Session, select
 from pydantic import BaseModel, ValidationError
 from app.models.conversation import Conversation, Message
@@ -148,12 +148,12 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
                 raise ValueError(f"Unknown conversation mode: {conversation.mode}")
 
             conversation.status = "completed"
-            conversation.completed_at = datetime.utcnow()
+            conversation.completed_at = datetime.now(UTC)
 
         except Exception as e:
             conversation.status = "failed"
             conversation.meta_info = {"error": str(e)}
-            conversation.completed_at = datetime.utcnow()
+            conversation.completed_at = datetime.now(UTC)
 
         self.session.add(conversation)
         self.session.commit()

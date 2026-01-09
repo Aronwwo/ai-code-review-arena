@@ -368,8 +368,8 @@ async def update_issue(
     for field, value in update_data.items():
         setattr(issue, field, value)
 
-    from datetime import datetime
-    issue.updated_at = datetime.utcnow()
+    from datetime import datetime, UTC
+    issue.updated_at = datetime.now(UTC)
 
     session.add(issue)
     session.commit()

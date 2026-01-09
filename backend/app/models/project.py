@@ -1,7 +1,7 @@
 """Project model."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -20,8 +20,8 @@ class Project(SQLModel, table=True):
     name: str = Field(max_length=255, index=True)
     description: str | None = Field(default=None, max_length=2000)
     owner_id: int = Field(foreign_key="users.id", index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     owner: User = Relationship(back_populates="projects")

@@ -1,7 +1,7 @@
 """Evaluation API endpoints for Model Duel."""
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select, desc
-from datetime import datetime
+from datetime import datetime, UTC
 from app.database import get_session
 from app.models.user import User
 from app.models.project import Project
@@ -311,7 +311,7 @@ async def submit_vote(
     # Check if session is completed
     if current_round >= eval_session.num_rounds:
         eval_session.status = "completed"
-        eval_session.completed_at = datetime.utcnow()
+        eval_session.completed_at = datetime.now(UTC)
 
     session.add(eval_session)
     session.commit()
@@ -370,7 +370,7 @@ async def update_ratings(
         rating_a.losses += 1
     else:
         rating_a.ties += 1
-    rating_a.updated_at = datetime.utcnow()
+    rating_a.updated_at = datetime.now(UTC)
     session.add(rating_a)
 
     # Update rating B
@@ -382,7 +382,7 @@ async def update_ratings(
         rating_b.losses += 1
     else:
         rating_b.ties += 1
-    rating_b.updated_at = datetime.utcnow()
+    rating_b.updated_at = datetime.now(UTC)
     session.add(rating_b)
 
     session.commit()
@@ -459,7 +459,7 @@ def update_model_rating(provider: str, model: str, session: Session):
     model_rating.wins = total_wins
     model_rating.losses = total_losses
     model_rating.ties = total_ties
-    model_rating.updated_at = datetime.utcnow()
+    model_rating.updated_at = datetime.now(UTC)
 
     session.add(model_rating)
     session.commit()

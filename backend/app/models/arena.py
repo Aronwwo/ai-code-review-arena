@@ -11,9 +11,10 @@ System ocenia który schemat jest lepszy i aktualizuje rankingi ELO.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING, Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
+from sqlalchemy import ForeignKey, Integer
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -47,8 +48,22 @@ class ArenaSession(SQLModel, table=True):
     schema_b_config: dict = Field(sa_column=Column(JSON), description="Pełna konfiguracja Schematu B")
 
     # ID review utworzonych dla każdego schematu
-    review_a_id: int | None = Field(default=None, foreign_key="reviews.id", index=True)
-    review_b_id: int | None = Field(default=None, foreign_key="reviews.id", index=True)
+    review_a_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("reviews.id", use_alter=True, name="fk_arena_review_a"),
+            index=True
+        )
+    )
+    review_b_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("reviews.id", use_alter=True, name="fk_arena_review_b"),
+            index=True
+        )
+    )
 
     # Wynik głosowania
     winner: str | None = None  # "A", "B", "tie"
@@ -58,7 +73,7 @@ class ArenaSession(SQLModel, table=True):
 
     # Metadane
     error_message: str | None = Field(default=None, max_length=2000)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
 
     # Relationships
@@ -106,8 +121,8 @@ class SchemaRating(SQLModel, table=True):
     last_used_at: datetime | None = None  # Kiedy ostatnio użyty
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # ==================== API Schemas ====================
