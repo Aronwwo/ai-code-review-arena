@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { CodeViewer } from '@/components/CodeViewer';
 import { ConversationView } from '@/components/ConversationView';
 import { useReviewWebSocket } from '@/hooks/useReviewWebSocket';
-import { ArrowLeft, AlertCircle, AlertTriangle, Info, FileCode, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Loader2, CheckCircle2, XCircle, Radio, Swords } from 'lucide-react';
+import { ArrowLeft, AlertCircle, AlertTriangle, Info, FileCode, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Loader2, CheckCircle2, XCircle, Radio } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectWithFiles {
@@ -36,7 +36,6 @@ export function ReviewDetail() {
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedIssueForDebate, setSelectedIssueForDebate] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('issues');
   const pageSize = 10;
 
@@ -130,11 +129,10 @@ export function ReviewDetail() {
     });
   };
 
-  const startArenaDebate = (issueId: number, event: React.MouseEvent) => {
+  const startArenaDebate = (event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent card toggle
-    setSelectedIssueForDebate(issueId);
     setActiveTab('discussions');
-    toast.info('Otwarto zakładkę dyskusji. Kliknij "Arena" aby rozpocząć debatę.');
+    toast.info('Otwarto zakładkę dyskusji AI.');
   };
 
   const getCodeSnippet = (fileName: string | null, lineStart: number | null, lineEnd: number | null) => {
@@ -412,11 +410,11 @@ export function ReviewDetail() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={(e) => startArenaDebate(issue.id, e)}
-                              title="Rozpocznij debatę Arena dla tego problemu"
+                              onClick={(e) => startArenaDebate(e)}
+                              title="Zobacz dyskusję AI o review"
                             >
-                              <Swords className="h-3 w-3 mr-1" />
-                              Debatuj
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              Dyskusja
                             </Button>
                             <Button variant="ghost" size="sm">
                               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -507,24 +505,9 @@ export function ReviewDetail() {
         </TabsContent>
 
         <TabsContent value="discussions" className="space-y-4">
-          {selectedIssueForDebate && (
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">Wybrano problem #{selectedIssueForDebate} do debaty</p>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Kliknij przycisk "Arena" poniżej, aby rozpocząć debatę Prosecutor vs Defender o tym problemie.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
           <ConversationView
             reviewId={parseInt(id || '0')}
-            issueId={selectedIssueForDebate || undefined}
+            issueId={undefined}
           />
         </TabsContent>
 
