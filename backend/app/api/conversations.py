@@ -12,35 +12,11 @@ from app.models.conversation import (
 )
 from app.api.deps import get_current_user
 from app.orchestrators.conversation import ConversationOrchestrator
+from app.utils.access import verify_review_access
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 reviews_router = APIRouter(prefix="/reviews/{review_id}/conversations", tags=["conversations"])
 issues_router = APIRouter(prefix="/issues/{issue_id}/debate", tags=["conversations"])
-
-
-async def verify_review_access(
-    review_id: int,
-    current_user: User,
-    session: Session
-) -> Review:
-    """Verify user has access to the review."""
-    review = session.get(Review, review_id)
-
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found"
-        )
-
-    # Verify access through project
-    project = session.get(Project, review.project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this review"
-        )
-
-    return review
 
 
 async def run_conversation_in_background(conversation_id: int, provider: str | None, model: str | None):

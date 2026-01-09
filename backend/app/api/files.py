@@ -7,31 +7,9 @@ from app.models.project import Project
 from app.models.file import File, FileCreate, FileUpdate, FileRead, FileReadWithContent
 from app.api.deps import get_current_user
 from app.config import settings
+from app.utils.access import verify_project_access
 
 router = APIRouter(prefix="/projects/{project_id}/files", tags=["files"])
-
-
-async def verify_project_access(
-    project_id: int,
-    current_user: User,
-    session: Session
-) -> Project:
-    """Verify user has access to the project."""
-    project = session.get(Project, project_id)
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this project"
-        )
-
-    return project
 
 
 def validate_code_content(content: str, filename: str) -> dict:

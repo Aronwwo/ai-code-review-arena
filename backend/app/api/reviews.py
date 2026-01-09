@@ -1,6 +1,7 @@
 """Review API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlmodel import Session, select, func
+from sqlalchemy.orm import selectinload
 from app.database import get_session
 from app.models.user import User
 from app.models.project import Project
@@ -11,32 +12,10 @@ from app.models.review import (
 )
 from app.api.deps import get_current_user
 from app.orchestrators.review import ReviewOrchestrator
+from app.utils.access import verify_project_access, verify_review_access
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 projects_router = APIRouter(prefix="/projects/{project_id}/reviews", tags=["reviews"])
-
-
-async def verify_project_access(
-    project_id: int,
-    current_user: User,
-    session: Session
-) -> Project:
-    """Verify user has access to the project."""
-    project = session.get(Project, project_id)
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this project"
-        )
-
-    return project
 
 
 async def run_review_in_background(
@@ -273,17 +252,23 @@ async def get_review_issues(
     count_query = select(func.count()).select_from(base_query.subquery())
     total = session.exec(count_query).one()
 
-    # Calculate offset and get paginated results
+    # Calculate offset and get paginated results with eager loading of suggestions
+    # Use selectinload to prevent N+1 query problem
     offset = (page - 1) * page_size
-    statement = base_query.order_by(Issue.severity.desc(), Issue.created_at).offset(offset).limit(page_size)
+    statement = (
+        base_query
+        .options(selectinload(Issue.suggestions))
+        .order_by(Issue.severity.desc(), Issue.created_at)
+        .offset(offset)
+        .limit(page_size)
+    )
     issues = session.exec(statement).all()
 
-    # Build responses with suggestions
+    # Build responses with suggestions (already loaded via selectinload)
     items = []
     for issue in issues:
-        suggestion_stmt = select(Suggestion).where(Suggestion.issue_id == issue.id)
-        suggestions = session.exec(suggestion_stmt).all()
-        suggestion_reads = [SuggestionRead(**s.model_dump()) for s in suggestions]
+        # Suggestions are already loaded, no additional query needed
+        suggestion_reads = [SuggestionRead(**s.model_dump()) for s in issue.suggestions]
 
         items.append(IssueReadWithSuggestions(
             **issue.model_dump(),

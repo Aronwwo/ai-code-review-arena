@@ -347,7 +347,13 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
             data = json.loads(response)
             summary_obj = CouncilSummarySchema(**data)
             summary_text = json.dumps(data, indent=2)
-        except (json.JSONDecodeError, ValidationError):
+        except json.JSONDecodeError as e:
+            logger.warning(f"Council summary JSON decode error: {str(e)[:200]}")
+            logger.debug(f"Raw response preview: {response[:500]}...")
+            # Fallback
+            summary_text = response
+        except ValidationError as e:
+            logger.error(f"Council summary validation error: {e.errors()}")
             # Fallback
             summary_text = response
 
@@ -422,8 +428,13 @@ Render your verdict as JSON:""")
 
             self.session.add(issue)
 
-        except (json.JSONDecodeError, ValidationError):
-            pass  # Keep original issue state if parsing fails
+        except json.JSONDecodeError as e:
+            logger.warning(f"Arena verdict JSON decode error: {str(e)[:200]}")
+            logger.debug(f"Raw verdict response preview: {verdict_response[:500]}...")
+            # Keep original issue state if parsing fails
+        except ValidationError as e:
+            logger.error(f"Arena verdict validation error: {e.errors()}")
+            # Keep original issue state if parsing fails
 
         # Store verdict as summary
         conversation.summary = response

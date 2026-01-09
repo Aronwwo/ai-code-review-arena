@@ -45,12 +45,12 @@ export function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar - Desktop */}
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r bg-card md:flex">
-        <div className="flex h-16 items-center border-b px-6">
+      {/* Sidebar - Desktop & Tablet */}
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-56 flex-col border-r bg-card md:flex lg:w-64">
+        <div className="flex h-16 items-center border-b px-4 lg:px-6">
           <Link to="/dashboard" className="flex items-center gap-2">
             <Bot className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">AI Code Review</span>
+            <span className="text-base font-bold lg:text-lg">AI Code Review</span>
           </Link>
         </div>
         <nav className="flex-1 space-y-1 p-4">
@@ -108,9 +108,9 @@ export function DashboardLayout() {
       )}
 
       {/* Main Content Area */}
-      <div className="md:pl-64">
+      <div className="md:pl-56 lg:pl-64">
         {/* Top Header */}
-        <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-6">
+        <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-6 lg:px-8">
           <Button
             variant="ghost"
             size="sm"
@@ -171,7 +171,7 @@ export function DashboardLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="p-4 md:p-6">
+        <main className="p-4 md:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

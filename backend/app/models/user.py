@@ -12,6 +12,31 @@ if TYPE_CHECKING:
     from app.models.review import Review
 
 
+def validate_email_format(email: str) -> str:
+    """Validate email format and normalize to lowercase.
+
+    Accepts .test and .local TLDs for development environments.
+
+    Args:
+        email: Email address to validate
+
+    Returns:
+        Normalized (lowercase) email address
+
+    Raises:
+        ValueError: If email format is invalid
+    """
+    if not email or '@' not in email:
+        raise ValueError('nieprawidłowy format email')
+
+    # Basic email regex that accepts .test and .local TLDs
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(pattern, email.lower()):
+        raise ValueError('nieprawidłowy format email')
+
+    return email.lower()
+
+
 class User(SQLModel, table=True):
     """User account."""
 
@@ -41,16 +66,8 @@ class UserCreate(SQLModel):
     @field_validator('email')
     @classmethod
     def validate_email(cls, v: str) -> str:
-        """Validate email format (accepts .test and .local for development)."""
-        if not v or '@' not in v:
-            raise ValueError('nieprawidłowy format email')
-
-        # Basic email regex that accepts .test and .local TLDs
-        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(pattern, v.lower()):
-            raise ValueError('nieprawidłowy format email')
-
-        return v.lower()
+        """Validate email format using shared validation function."""
+        return validate_email_format(v)
 
 
 class UserLogin(SQLModel):
@@ -62,16 +79,8 @@ class UserLogin(SQLModel):
     @field_validator('email')
     @classmethod
     def validate_email(cls, v: str) -> str:
-        """Validate email format (accepts .test and .local for development)."""
-        if not v or '@' not in v:
-            raise ValueError('nieprawidłowy format email')
-
-        # Basic email regex that accepts .test and .local TLDs
-        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(pattern, v.lower()):
-            raise ValueError('nieprawidłowy format email')
-
-        return v.lower()
+        """Validate email format using shared validation function."""
+        return validate_email_format(v)
 
 
 class UserRead(SQLModel):

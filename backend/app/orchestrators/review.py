@@ -370,7 +370,10 @@ Return ONLY valid JSON, no other text."""
             issues_data = [issue.model_dump() for issue in schema.issues]
             return True, issues_data
 
-        except (json.JSONDecodeError, ValidationError):
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode error in LLM response: {str(e)[:200]}")
+            logger.debug(f"Raw output preview: {raw_output[:500]}...")
+
             # Fallback: try to extract JSON from text
             try:
                 # Look for JSON block
@@ -380,11 +383,17 @@ Return ONLY valid JSON, no other text."""
                     data = json.loads(json_match.group(0))
                     schema = ReviewResponseSchema(**data)
                     issues_data = [issue.model_dump() for issue in schema.issues]
+                    logger.info("Successfully recovered JSON from text")
                     return True, issues_data
-            except Exception:
-                pass
+            except Exception as fallback_error:
+                logger.error(f"Fallback parsing also failed: {str(fallback_error)[:200]}")
+
+        except ValidationError as e:
+            logger.error(f"Pydantic validation error in LLM response: {e.errors()}")
+            logger.debug(f"Raw output preview: {raw_output[:500]}...")
 
         # Parsing failed
+        logger.error("Failed to parse LLM response after all attempts")
         return False, []
 
     async def _store_issue(self, review: Review, issue_data: dict):
