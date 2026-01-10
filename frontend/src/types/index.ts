@@ -88,17 +88,28 @@ export interface Review {
 export interface AgentConfig {
   provider: string;
   model: string;
+  prompt: string;
   temperature?: number;
   max_tokens?: number;
+  custom_provider?: {
+    id: string;
+    name: string;
+    base_url: string;
+    api_key?: string;
+    header_name?: string;
+    header_prefix?: string;
+  };
 }
 
 export interface ReviewCreate {
+  review_mode: ReviewMode;
+  moderator_type: 'debate' | 'consensus' | 'strategic';
   agent_roles: string[];
   provider?: string;
   model?: string;
   agent_configs?: Record<string, AgentConfig>;
+  moderator_config: AgentConfig;
   api_keys?: Record<string, string>;
-  conversation_mode?: 'council' | 'arena';
 }
 
 export interface ReviewAgent {

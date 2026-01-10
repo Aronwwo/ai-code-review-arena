@@ -23,7 +23,8 @@ async def run_review_in_background(
     provider: str | None,
     model: str | None,
     api_keys: dict[str, str] | None = None,
-    agent_configs: dict | None = None
+    agent_configs: dict | None = None,
+    moderator_config: dict | None = None
 ):
     """Run review in background task."""
     from app.database import Session, engine
@@ -39,9 +40,23 @@ async def run_review_in_background(
             else:
                 parsed_agent_configs[role] = config
 
+    parsed_moderator_config = None
+    if moderator_config:
+        if isinstance(moderator_config, dict):
+            parsed_moderator_config = AgentConfig(**moderator_config)
+        else:
+            parsed_moderator_config = moderator_config
+
     with Session(engine) as session:
         orchestrator = ReviewOrchestrator(session)
-        await orchestrator.conduct_review(review_id, provider, model, api_keys, parsed_agent_configs)
+        await orchestrator.conduct_review(
+            review_id,
+            provider,
+            model,
+            api_keys,
+            parsed_agent_configs,
+            parsed_moderator_config
+        )
 
 
 @projects_router.post("", response_model=ReviewRead, status_code=status.HTTP_201_CREATED)
@@ -78,7 +93,7 @@ async def create_review(
 
     # === WALIDACJA TRYBU ===
     # Arena review MUSZĄ być tworzone przez POST /arena/sessions, nie bezpośrednio
-    review_mode = review_data.review_mode or "council"
+    review_mode = review_data.review_mode
 
     if review_mode == "combat_arena":
         raise HTTPException(
@@ -89,15 +104,42 @@ async def create_review(
                 "provided_mode": review_mode
             }
         )
-
-    # Handle deprecated conversation_mode field
-    if review_data.conversation_mode and not review_data.review_mode:
-        review_mode = review_data.conversation_mode
-        if review_mode not in ["council", "combat_arena"]:
-            review_mode = "council"
+    if review_mode != "council":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "Nieprawidłowy tryb review",
+                "allowed": ["council"],
+                "provided_mode": review_mode
+            }
+        )
 
     # === TWORZENIE COUNCIL REVIEW ===
-    moderator_type = review_data.moderator_type or "debate"
+    moderator_type = review_data.moderator_type
+
+    if not review_data.agent_configs:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="agent_configs jest wymagane dla trybu council"
+        )
+
+    if not review_data.moderator_config:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="moderator_config jest wymagane dla trybu council"
+        )
+    if not review_data.moderator_config.prompt.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="moderator_config.prompt nie może być pusty"
+        )
+
+    for role, config in review_data.agent_configs.items():
+        if not config.prompt.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"agent_configs[{role}].prompt nie może być pusty"
+            )
 
     review = Review(
         project_id=project_id,
@@ -118,8 +160,10 @@ async def create_review(
             provider = config.provider
             model = config.model
         else:
-            provider = review_data.provider or "mock"
-            model = review_data.model or "default"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Brak konfiguracji dla roli '{role}' w agent_configs"
+            )
 
         agent = ReviewAgent(
             review_id=review.id,
@@ -133,11 +177,11 @@ async def create_review(
     session.commit()
 
     # Start review in background with agent configs
-    agent_configs_dict = None
-    if review_data.agent_configs:
-        agent_configs_dict = {
-            role: config.model_dump() for role, config in review_data.agent_configs.items()
-        }
+    agent_configs_dict = {
+        role: config.model_dump() for role, config in review_data.agent_configs.items()
+    }
+
+    moderator_config_dict = review_data.moderator_config.model_dump()
 
     background_tasks.add_task(
         run_review_in_background,
@@ -145,7 +189,8 @@ async def create_review(
         review_data.provider,
         review_data.model,
         review_data.api_keys,
-        agent_configs_dict
+        agent_configs_dict,
+        moderator_config_dict
     )
 
     return ReviewRead(
@@ -313,7 +358,7 @@ async def get_review_issues(
     items = []
     for issue in issues:
         # Suggestions are already loaded, no additional query needed
-        suggestion_reads = [SuggestionRead(**s.model_dump()) for s in issue.suggestions]
+        suggestion_reads = [SuggestionRead(**s.model_dump()) for s in (issue.suggestions or [])]
 
         items.append(IssueReadWithSuggestions(
             **issue.model_dump(),

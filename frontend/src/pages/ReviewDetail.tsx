@@ -29,6 +29,14 @@ interface PaginatedResponse<T> {
   has_prev: boolean;
 }
 
+interface ConversationSummary {
+  id: number;
+  mode: 'council' | 'arena';
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  summary?: string | null;
+  created_at: string;
+}
+
 export function ReviewDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -102,6 +110,15 @@ export function ReviewDetail() {
     queryKey: ['agents', id],
     queryFn: async () => {
       const response = await api.get(`/reviews/${id}/agents`);
+      return response.data;
+    },
+    enabled: !!id,
+  });
+
+  const { data: conversations } = useQuery<ConversationSummary[]>({
+    queryKey: ['conversations', id],
+    queryFn: async () => {
+      const response = await api.get(`/reviews/${id}/conversations`);
       return response.data;
     },
     enabled: !!id,
@@ -185,6 +202,19 @@ export function ReviewDetail() {
 
   if (!review) {
     return <div className="text-center py-12">Przegląd nie znaleziony</div>;
+  }
+
+  const councilConversation = conversations
+    ?.filter((c) => c.mode === 'council' && c.summary)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+  let moderatorSummaryText: string | null = null;
+  if (councilConversation?.summary) {
+    try {
+      const parsed = JSON.parse(councilConversation.summary);
+      moderatorSummaryText = parsed.summary || councilConversation.summary;
+    } catch {
+      moderatorSummaryText = councilConversation.summary;
+    }
   }
 
   const categories = Array.from(new Set(issues.map((i) => i.category)));
@@ -340,7 +370,20 @@ export function ReviewDetail() {
           <TabsTrigger value="files">Pliki ({project?.files?.length || 0})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="issues" className="space-y-4">
+          <TabsContent value="issues" className="space-y-4">
+            {moderatorSummaryText && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Podsumowanie Moderatora</CardTitle>
+                  <CardDescription>
+                    Podsumowanie powstałe na podstawie dyskusji agentów (Council).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="whitespace-pre-wrap text-sm">{moderatorSummaryText}</p>
+                </CardContent>
+              </Card>
+            )}
           {/* Filters */}
           <Card>
             <CardContent className="pt-4">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
@@ -8,25 +8,27 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Switch } from '@/components/ui/Switch';
+import { Textarea } from '@/components/ui/Textarea';
 import { Shield, Zap, Paintbrush, Code, Users, Swords, Loader2, AlertTriangle, Bot, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-import { getProviders, CustomProvider } from '@/pages/Settings';
+import { getProviders, CustomProvider } from '@/lib/providers';
 
 interface AgentConfig {
   enabled: boolean;
   provider: string;
   model: string;
+  prompt: string;
 }
 
 interface ArenaSchemaConfig {
-  general: { provider: string; model: string };
-  security: { provider: string; model: string };
-  performance: { provider: string; model: string };
-  style: { provider: string; model: string };
+  general: { provider: string; model: string; prompt: string };
+  security: { provider: string; model: string; prompt: string };
+  performance: { provider: string; model: string; prompt: string };
+  style: { provider: string; model: string; prompt: string };
 }
 
-interface ReviewConfig {
+export interface ReviewConfig {
   agents: {
     general: AgentConfig;
     security: AgentConfig;
@@ -36,9 +38,10 @@ interface ReviewConfig {
   moderator: {
     provider: string;
     model: string;
+    prompt: string;
     type: 'debate' | 'consensus' | 'strategic';
   };
-  mode: 'council' | 'arena';
+  mode: 'council' | 'arena' | null;
   arena_schema_a: ArenaSchemaConfig;
   arena_schema_b: ArenaSchemaConfig;
 }
@@ -84,24 +87,24 @@ export function ReviewConfigDialog({
 
   const [config, setConfig] = useState<ReviewConfig>({
     agents: {
-      general: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      security: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      performance: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      style: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
     },
-    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', type: 'debate' },
-    mode: 'council',  // Default to council for now - user can change in Mode tab
+    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '', type: 'debate' },
+    mode: null,
     arena_schema_a: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
     },
     arena_schema_b: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
     },
   });
 
@@ -121,7 +124,7 @@ export function ReviewConfigDialog({
     refetchOnMount: 'always',
   });
 
-  const ollamaModels = ollamaModelsData?.models || [];
+  const ollamaModels = useMemo(() => ollamaModelsData?.models || [], [ollamaModelsData?.models]);
 
   // Aktualizuj providerów gdy załadują się modele Ollama
   useEffect(() => {
@@ -133,10 +136,10 @@ export function ReviewConfigDialog({
 
         // Update localStorage for Ollama provider
         const saved = localStorage.getItem('custom_providers');
-        const customProviders = saved ? JSON.parse(saved) : [];
+        const customProviders: Array<Partial<CustomProvider>> = saved ? JSON.parse(saved) : [];
 
         // Update or add Ollama to localStorage
-        const ollamaIndex = customProviders.findIndex((p: any) => p.id === 'ollama');
+        const ollamaIndex = customProviders.findIndex((p) => p.id === 'ollama');
         const ollamaProvider = updated.find(p => p.id === 'ollama');
 
         if (ollamaProvider) {
@@ -214,7 +217,7 @@ export function ReviewConfigDialog({
     }));
   };
 
-  const updateModerator = (updates: Partial<{ provider: string; model: string; type: 'debate' | 'consensus' | 'strategic' }>) => {
+  const updateModerator = (updates: Partial<{ provider: string; model: string; prompt: string; type: 'debate' | 'consensus' | 'strategic' }>) => {
     setConfig(prev => ({
       ...prev,
       moderator: { ...prev.moderator, ...updates },
@@ -224,7 +227,7 @@ export function ReviewConfigDialog({
   const updateArenaSchema = (
     schema: 'a' | 'b',
     role: keyof ArenaSchemaConfig,
-    updates: Partial<{ provider: string; model: string }>
+    updates: Partial<{ provider: string; model: string; prompt: string }>
   ) => {
     const schemaKey = schema === 'a' ? 'arena_schema_a' : 'arena_schema_b';
     setConfig(prev => ({
@@ -239,22 +242,51 @@ export function ReviewConfigDialog({
   const enabledAgentCount = Object.values(config.agents).filter(a => a.enabled).length;
 
   const handleStartReview = () => {
-    if (enabledAgentCount === 0) {
-      toast.error('Wybierz przynajmniej jednego agenta');
+    if (!config.mode) {
+      toast.error('Wybierz tryb przed rozpoczęciem');
       return;
     }
 
-    // Validate that all enabled agents have models selected
-    for (const [id, agent] of Object.entries(config.agents)) {
-      if (agent.enabled && !agent.model) {
-        toast.error(`Wybierz model dla agenta ${id}`);
+    if (config.mode === 'council') {
+      if (enabledAgentCount === 0) {
+        toast.error('Wybierz przynajmniej jednego agenta');
         return;
       }
-    }
 
-    if (!config.moderator.model) {
-      toast.error('Wybierz model dla moderatora');
-      return;
+      // Validate that all enabled agents have models and prompts selected
+      for (const [id, agent] of Object.entries(config.agents)) {
+        if (agent.enabled && !agent.model) {
+          toast.error(`Wybierz model dla agenta ${id}`);
+          return;
+        }
+        if (agent.enabled && !agent.prompt.trim()) {
+          toast.error(`Uzupełnij prompt dla agenta ${id}`);
+          return;
+        }
+      }
+
+      if (!config.moderator.model) {
+        toast.error('Wybierz model dla moderatora');
+        return;
+      }
+      if (!config.moderator.prompt.trim()) {
+        toast.error('Uzupełnij prompt dla moderatora');
+        return;
+      }
+    } else {
+      for (const schemaKey of ['arena_schema_a', 'arena_schema_b'] as const) {
+        for (const [roleId, schemaConfig] of Object.entries(config[schemaKey])) {
+          const roleLabel = `${schemaKey === 'arena_schema_a' ? 'Schema A' : 'Schema B'} / ${roleId}`;
+          if (!schemaConfig.model) {
+            toast.error(`Wybierz model dla ${roleLabel}`);
+            return;
+          }
+          if (!schemaConfig.prompt.trim()) {
+            toast.error(`Uzupełnij prompt dla ${roleLabel}`);
+            return;
+          }
+        }
+      }
     }
 
     onStartReview(config);
@@ -302,7 +334,7 @@ export function ReviewConfigDialog({
         )}
 
         <Tabs defaultValue="mode" className="mt-4">
-          <TabsList className={`grid w-full ${config.mode === 'arena' ? 'grid-cols-3' : 'grid-cols-3'}`}>
+          <TabsList className={`grid w-full ${config.mode ? 'grid-cols-3' : 'grid-cols-1'}`}>
             <TabsTrigger value="mode">Tryb Dyskusji</TabsTrigger>
             {config.mode === 'council' && (
               <>
@@ -412,6 +444,16 @@ export function ReviewConfigDialog({
                             </div>
                           )}
                         </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Prompt</Label>
+                          <Textarea
+                            value={agent.prompt}
+                            onChange={(e) => updateAgent(role.id, { prompt: e.target.value })}
+                            placeholder="Instrukcje dla agenta (np. na co ma zwrócić uwagę)"
+                            className="min-h-[90px]"
+                          />
+                        </div>
                       </CardContent>
                     )}
                   </Card>
@@ -490,6 +532,16 @@ export function ReviewConfigDialog({
                       </select>
                     )}
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Prompt Moderatora</Label>
+                  <Textarea
+                    value={config.moderator.prompt}
+                    onChange={(e) => updateModerator({ prompt: e.target.value })}
+                    placeholder="Instrukcje dla moderatora (np. jak syntetyzować wnioski)"
+                    className="min-h-[90px]"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -623,6 +675,16 @@ export function ReviewConfigDialog({
                               <div className="text-sm text-muted-foreground">Brak modeli</div>
                             )}
                           </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Prompt</Label>
+                            <Textarea
+                              value={schemaConfig.prompt}
+                              onChange={(e) => updateArenaSchema('a', role.id as keyof ArenaSchemaConfig, { prompt: e.target.value })}
+                              placeholder="Instrukcje dla roli w Schemacie A"
+                              className="min-h-[90px]"
+                            />
+                          </div>
                         </div>
                       </Card>
                     );
@@ -705,6 +767,16 @@ export function ReviewConfigDialog({
                               <div className="text-sm text-muted-foreground">Brak modeli</div>
                             )}
                           </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Prompt</Label>
+                            <Textarea
+                              value={schemaConfig.prompt}
+                              onChange={(e) => updateArenaSchema('b', role.id as keyof ArenaSchemaConfig, { prompt: e.target.value })}
+                              placeholder="Instrukcje dla roli w Schemacie B"
+                              className="min-h-[90px]"
+                            />
+                          </div>
                         </div>
                       </Card>
                     );
@@ -719,7 +791,11 @@ export function ReviewConfigDialog({
           <div className="flex items-center justify-between w-full">
             <div className="text-sm text-muted-foreground">
               {fileCount} plik(ów) • {Math.round(totalCodeSize / 1024)} KB kodu •
-              {config.mode === 'council' ? ` ${enabledAgentCount} agentów` : ' Arena Mode'}
+              {config.mode === 'council'
+                ? ` ${enabledAgentCount} agentów`
+                : config.mode === 'arena'
+                  ? ' Arena Mode'
+                  : ' Brak wybranego trybu'}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -727,7 +803,7 @@ export function ReviewConfigDialog({
               </Button>
               <Button
                 onClick={handleStartReview}
-                disabled={isLoading || (config.mode === 'council' && enabledAgentCount === 0) || fileCount === 0}
+                disabled={!config.mode || isLoading || (config.mode === 'council' && enabledAgentCount === 0) || fileCount === 0}
               >
                 {isLoading ? (
                   <>

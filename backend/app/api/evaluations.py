@@ -66,7 +66,8 @@ async def run_candidate_review(
         # Prepare agent config
         agent_config = AgentConfig(
             provider=candidate.provider,
-            model=candidate.model
+            model=candidate.model,
+            prompt="Ocena modelu w trybie testowym."
         )
 
         # Add custom provider if configured
@@ -90,7 +91,8 @@ async def run_candidate_review(
             candidate.provider,
             candidate.model,
             api_keys,
-            agent_configs
+            agent_configs,
+            None
         )
 
         # Update candidate with results

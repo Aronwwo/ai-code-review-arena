@@ -93,8 +93,10 @@ class Settings(BaseSettings):
 
     # ==================== AGENT CONFIGURATION ====================
     max_conversation_turns: int = 5  # Maksymalnie 5 rund dyskusji w Council mode
+    council_rounds: int = 2  # Liczba rund dyskusji w Council mode
     enable_agent_caching: bool = True  # Cache odpowiedzi agentów (oszczędność kosztów)
     cache_ttl_hours: int = 24  # Cache ważny przez 24h
+    max_prompt_chars: int = 12000  # Maksymalna długość promptu przed przycięciem
 
     # ==================== LOGGING ====================
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL

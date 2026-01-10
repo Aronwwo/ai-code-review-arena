@@ -26,6 +26,9 @@ import {
   AlertCircle, Loader2, TrendingUp, FileCode
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
+import type { AgentConfig } from '@/types';
+import type { LucideIcon } from 'lucide-react';
 
 export function ArenaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -84,8 +87,8 @@ export function ArenaDetail() {
       queryClient.invalidateQueries({ queryKey: ['arena-session', id] });
       queryClient.invalidateQueries({ queryKey: ['arena-rankings'] });
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się zapisać głosu');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się zapisać głosu'));
     },
   });
 
@@ -118,7 +121,7 @@ export function ArenaDetail() {
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; icon: any; label: string }> = {
+    const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'success'; icon: LucideIcon; label: string }> = {
       pending: { variant: 'secondary', icon: Clock, label: 'Oczekuje' },
       running: { variant: 'default', icon: Loader2, label: 'Uruchomione' },
       completed: { variant: 'success', icon: CheckCircle2, label: 'Zakończone' },
@@ -129,7 +132,7 @@ export function ArenaDetail() {
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant as any} className="gap-1">
+      <Badge variant={config.variant} className="gap-1">
         <Icon className={`h-3 w-3 ${status === 'running' ? 'animate-spin' : ''}`} />
         {config.label}
       </Badge>
@@ -138,6 +141,8 @@ export function ArenaDetail() {
 
   const canVote = session.status === 'completed' && !session.winner;
   const hasVoted = !!session.winner;
+  const schemaAConfig = session.schema_a_config as Record<string, AgentConfig>;
+  const schemaBConfig = session.schema_b_config as Record<string, AgentConfig>;
 
   return (
     <div className="container mx-auto p-6 max-w-7xl space-y-6">
@@ -224,7 +229,7 @@ export function ArenaDetail() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {Object.entries(session.schema_a_config).map(([role, config]: [string, any]) => (
+            {Object.entries(schemaAConfig).map(([role, config]) => (
               <div key={role} className="flex items-center justify-between text-sm">
                 <span className="font-medium capitalize">{role}:</span>
                 <span className="text-muted-foreground">
@@ -267,7 +272,7 @@ export function ArenaDetail() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {Object.entries(session.schema_b_config).map(([role, config]: [string, any]) => (
+            {Object.entries(schemaBConfig).map(([role, config]) => (
               <div key={role} className="flex items-center justify-between text-sm">
                 <span className="font-medium capitalize">{role}:</span>
                 <span className="text-muted-foreground">

@@ -1,4 +1,5 @@
 import Editor from '@monaco-editor/react';
+import type { editor as MonacoEditor } from 'monaco-editor';
 import { useState, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -59,11 +60,14 @@ export function CodeEditor({
   const [hasChanges, setHasChanges] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
   const mappedLanguage = languageMap[language.toLowerCase()] || language;
 
-  const handleEditorDidMount = (editor: any, monaco: any) => {
+  const handleEditorDidMount = (
+    editor: MonacoEditor.IStandaloneCodeEditor,
+    monaco: typeof import('monaco-editor')
+  ) => {
     editorRef.current = editor;
 
     // Add decorations for highlighted lines

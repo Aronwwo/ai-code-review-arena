@@ -158,6 +158,7 @@ class AgentConfig(SQLModel):
 
     provider: str
     model: str
+    prompt: str
     temperature: float = 0.2
     max_tokens: int = 2048
     # For custom providers
@@ -180,11 +181,11 @@ class ReviewCreate(SQLModel):
 
     # Wybór trybu
     review_mode: ReviewMode = Field(
-        default="council",
+        ...,
         description="Tryb review: 'council' (współpraca) lub 'combat_arena' (porównanie A vs B)"
     )
     moderator_type: ModeratorType = Field(
-        default="debate",
+        ...,
         description="Typ moderatora: 'debate' (Moderator Debaty), 'consensus' (Syntezator Konsensusu), 'strategic' (Strategiczny Koordynator)"
     )
 
@@ -204,6 +205,11 @@ class ReviewCreate(SQLModel):
     agent_configs: dict[str, AgentConfig] | None = Field(
         default=None,
         description="Konfiguracja per agent dla Council Mode: {role: config}"
+    )
+
+    moderator_config: AgentConfig | None = Field(
+        default=None,
+        description="Konfiguracja moderatora dla Council Mode"
     )
 
     # === COMBAT ARENA ===

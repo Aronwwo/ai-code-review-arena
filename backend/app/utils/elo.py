@@ -1,5 +1,4 @@
 """ELO rating calculation utilities."""
-import math
 
 
 def get_result_value(choice: str, is_player_a: bool) -> float:
@@ -21,26 +20,12 @@ def get_result_value(choice: str, is_player_a: bool) -> float:
         return 1.0 if choice == "candidate_b" else 0.0
 
 
-def calculate_expected_score(rating_a: float, rating_b: float) -> tuple[float, float]:
-    """Calculate expected scores for both players.
-
-    Args:
-        rating_a: ELO rating of player A
-        rating_b: ELO rating of player B
-
-    Returns:
-        Tuple of (expected_a, expected_b)
-    """
-    expected_a = 1.0 / (1.0 + math.pow(10, (rating_b - rating_a) / 400.0))
-    expected_b = 1.0 - expected_a
-    return expected_a, expected_b
-
-
 def elo_update(
     rating_a: float,
     rating_b: float,
     result: str,
-    k_factor: float = 32.0
+    games_played_a: int,
+    games_played_b: int
 ) -> tuple[float, float]:
     """Calculate new ELO ratings after a match.
 
@@ -48,23 +33,28 @@ def elo_update(
         rating_a: Current ELO rating of player A
         rating_b: Current ELO rating of player B
         result: Match result ("candidate_a", "candidate_b", "tie")
-        k_factor: K-factor for rating adjustment (default 32)
+        games_played_a: Games played by player A
+        games_played_b: Games played by player B
 
     Returns:
         Tuple of (new_rating_a, new_rating_b)
     """
-    # Calculate expected scores
-    expected_a, expected_b = calculate_expected_score(rating_a, rating_b)
+    k_a = get_k_factor(games_played_a)
+    k_b = get_k_factor(games_played_b)
 
-    # Get actual scores
-    actual_a = get_result_value(result, is_player_a=True)
-    actual_b = get_result_value(result, is_player_a=False)
+    if result == "tie":
+        base_delta = 5.0
+        if rating_a == rating_b:
+            return rating_a, rating_b
+        if rating_a < rating_b:
+            return rating_a + base_delta * (k_a / 32.0), rating_b - base_delta * (k_b / 32.0)
+        return rating_a - base_delta * (k_a / 32.0), rating_b + base_delta * (k_b / 32.0)
 
-    # Calculate new ratings
-    new_rating_a = rating_a + k_factor * (actual_a - expected_a)
-    new_rating_b = rating_b + k_factor * (actual_b - expected_b)
+    base_delta = 20.0
+    if result == "candidate_a":
+        return rating_a + base_delta * (k_a / 32.0), rating_b - base_delta * (k_b / 32.0)
 
-    return new_rating_a, new_rating_b
+    return rating_a - base_delta * (k_a / 32.0), rating_b + base_delta * (k_b / 32.0)
 
 
 def get_k_factor(games_played: int) -> float:

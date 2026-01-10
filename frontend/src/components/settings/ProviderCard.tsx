@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Edit, Trash2, Key, Globe, Check, X } from 'lucide-react';
 import { useState } from 'react';
-import { CustomProvider } from '@/pages/Settings';
+import { CustomProvider } from '@/lib/providers';
 
 interface ProviderCardProps {
   provider: CustomProvider;

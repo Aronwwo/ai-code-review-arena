@@ -48,10 +48,11 @@ export function UserSettingsSection({ userEmail, userName }: UserSettingsSection
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
-    } catch (error: any) {
-      if (error.response?.status === 422) {
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 422) {
         toast.error(parseApiError(error, 'Nieprawidłowe dane hasła'));
-      } else if (error.response?.status !== 401) {
+      } else if (status !== 401) {
         toast.error(parseApiError(error, 'Nie udało się zmienić hasła'));
       }
     } finally {

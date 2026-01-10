@@ -1,6 +1,5 @@
 """Mock LLM provider for testing and demos."""
 import json
-import random
 from app.providers.base import LLMProvider, LLMMessage
 
 
@@ -153,18 +152,17 @@ class MockProvider(LLMProvider):
                 }
             ]
 
-        # Add a random additional issue sometimes
-        if random.random() > 0.5:
-            issues.append({
-                "severity": random.choice(["info", "warning"]),
-                "category": "code-quality",
-                "title": "Consider Using Type Hints",
-                "description": "Function parameters and return types lack type hints, making the code less maintainable.",
-                "file_name": "services.py",
-                "line_start": 89,
-                "line_end": 89,
-                "suggested_fix": "Add type hints: def process_data(data: dict[str, Any]) -> list[Result]:"
-            })
+        # Add a deterministic additional issue
+        issues.append({
+            "severity": "info",
+            "category": "code-quality",
+            "title": "Consider Using Type Hints",
+            "description": "Function parameters and return types lack type hints, making the code less maintainable.",
+            "file_name": "services.py",
+            "line_start": 89,
+            "line_end": 89,
+            "suggested_fix": "Add type hints: def process_data(data: dict[str, Any]) -> list[Result]:"
+        })
 
         # Format as JSON
         response = {

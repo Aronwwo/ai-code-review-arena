@@ -19,8 +19,9 @@ from sqlmodel import Session, select
 from app.models.arena import ArenaSession, SchemaRating
 from app.models.review import Review, ReviewAgent, AgentConfig
 from app.orchestrators.review import ReviewOrchestrator
-from app.utils.elo import elo_update, get_k_factor
+from app.utils.elo import elo_update
 from app.providers.router import CustomProviderConfig
+from app.utils.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +235,8 @@ class ArenaOrchestrator:
                 provider_name=None,  # Każdy agent ma własną konfigurację
                 model=None,
                 api_keys=api_keys,
-                agent_configs=agent_configs_typed
+                agent_configs=agent_configs_typed,
+                moderator_config=None
             )
         except Exception as e:
             logger.error(f"Review {review.id} (schema {schema_name}) failed: {e}")
@@ -320,6 +322,8 @@ class ArenaOrchestrator:
                 winner=winner
             )
             logger.info(f"Arena session {arena_session_id}: rankingi ELO zaktualizowane")
+            cache.delete_prefix("arena:rankings")
+            cache.delete("arena:stats")
         except Exception as e:
             logger.error(
                 f"Arena session {arena_session_id}: "
@@ -357,14 +361,9 @@ class ArenaOrchestrator:
         rating_a = self._get_or_create_schema_rating(hash_a, schema_a_config)
         rating_b = self._get_or_create_schema_rating(hash_b, schema_b_config)
 
-        # Oblicz K-factor (zależy od doświadczenia)
-        k_a = get_k_factor(rating_a.games_played)
-        k_b = get_k_factor(rating_b.games_played)
-        k_factor = (k_a + k_b) / 2  # Średni K-factor
-
         logger.info(
             f"ELO przed: A={rating_a.elo_rating:.0f}, B={rating_b.elo_rating:.0f}, "
-            f"K={k_factor:.1f}"
+            f"Gry: A={rating_a.games_played}, B={rating_b.games_played}"
         )
 
         # Oblicz nowe ratingi
@@ -373,7 +372,8 @@ class ArenaOrchestrator:
             rating_a=rating_a.elo_rating,
             rating_b=rating_b.elo_rating,
             result=result_for_elo,
-            k_factor=k_factor
+            games_played_a=rating_a.games_played,
+            games_played_b=rating_b.games_played
         )
 
         # Zaktualizuj rating A

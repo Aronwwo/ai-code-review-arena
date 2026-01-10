@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/Label';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
-import { CustomProvider } from '@/pages/Settings';
+import { CustomProvider } from '@/lib/providers';
 import { toast } from 'sonner';
 
 interface ProviderDialogProps {

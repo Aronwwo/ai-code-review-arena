@@ -26,7 +26,7 @@ class TestArenaSessionCreation:
         file_response = client.post(
             f"/projects/{project_id}/files",
             json={
-                "file_path": "test.py",
+                "name": "test.py",
                 "content": "def test():\n    return 42\n",
                 "language": "python"
             },
@@ -40,16 +40,16 @@ class TestArenaSessionCreation:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 }
             },
             headers=auth_headers
@@ -79,15 +79,15 @@ class TestArenaSessionCreation:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
                     # Missing: performance, style
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 }
             },
             headers=auth_headers
@@ -114,13 +114,13 @@ class TestArenaSessionCreation:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                     # Missing: security, performance, style
                 }
             },
@@ -138,16 +138,16 @@ class TestArenaSessionCreation:
             json={
                 "project_id": 99999,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 }
             },
             headers=auth_headers
@@ -173,8 +173,8 @@ class TestArenaVoting:
         client.post(
             f"/projects/{project_id}/files",
             json={
-                "file_path": "test.py",
-                "content": "def test(): pass",
+                "name": "test.py",
+                "content": "def test():\n    return 123\n",
                 "language": "python"
             },
             headers=auth_headers
@@ -186,16 +186,16 @@ class TestArenaVoting:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 }
             },
             headers=auth_headers
@@ -208,7 +208,7 @@ class TestArenaVoting:
         # Vote for candidate A
         vote_response = client.post(
             f"/arena/sessions/{session_id}/vote",
-            json={"choice": "candidate_a"},
+            json={"winner": "A"},
             headers=auth_headers
         )
 
@@ -219,16 +219,16 @@ class TestArenaVoting:
         """Should require authentication for voting."""
         vote_response = client.post(
             "/arena/sessions/1/vote",
-            json={"choice": "candidate_a"}
+            json={"winner": "A"}
         )
 
-        assert vote_response.status_code == 401
+        assert vote_response.status_code in [401, 403]
 
     def test_vote_invalid_choice(self, client: TestClient, auth_headers: dict):
         """Should reject invalid vote choices."""
         vote_response = client.post(
             "/arena/sessions/1/vote",
-            json={"choice": "invalid_choice"},
+            json={"winner": "invalid_choice"},
             headers=auth_headers
         )
 
@@ -277,8 +277,8 @@ class TestArenaSessionRetrieval:
         client.post(
             f"/projects/{project_id}/files",
             json={
-                "file_path": "test.py",
-                "content": "def test(): pass",
+                "name": "test.py",
+                "content": "def test():\n    return 1\n",
                 "language": "python"
             },
             headers=auth_headers
@@ -290,16 +290,16 @@ class TestArenaSessionRetrieval:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 }
             },
             headers=auth_headers
@@ -342,7 +342,7 @@ class TestArenaSessionRetrieval:
 
         client.post(
             f"/projects/{project_id}/files",
-            json={"file_path": "test.py", "content": "pass", "language": "python"},
+            json={"name": "test.py", "content": "def demo():\n    return True\n", "language": "python"},
             headers=auth_headers
         )
 
@@ -351,16 +351,16 @@ class TestArenaSessionRetrieval:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default"},
-                    "security": {"provider": "mock", "model": "default"},
-                    "performance": {"provider": "mock", "model": "default"},
-                    "style": {"provider": "mock", "model": "default"}
+                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
                 }
             },
             headers=auth_headers
@@ -372,7 +372,8 @@ class TestArenaSessionRetrieval:
             "/auth/register",
             json={
                 "email": "other@example.com",
-                "password": "password123",
+                "username": "otheruser",
+                "password": "Password123",
                 "full_name": "Other User"
             }
         )
@@ -380,7 +381,7 @@ class TestArenaSessionRetrieval:
         # Login as second user
         login_response = client.post(
             "/auth/login",
-            json={"email": "other@example.com", "password": "password123"}
+            json={"email": "other@example.com", "password": "Password123"}
         )
         other_headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
 

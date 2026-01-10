@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -46,12 +46,13 @@ export function Register() {
       await register({ email, username, password });
       toast.success('Konto utworzone pomyślnie!');
       navigate('/projects');
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle different error types
-      if (error.response?.status === 422) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 422) {
         // Pydantic validation error (e.g., invalid email format)
         toast.error(parseApiError(error, 'Nieprawidłowe dane rejestracji'));
-      } else if (error.response?.status !== 401) {
+      } else if (status !== 401) {
         // Other errors (401 is handled by interceptor)
         toast.error(parseApiError(error, 'Rejestracja nie powiodła się'));
       }

@@ -21,6 +21,7 @@ from app.models.review import Review, ReviewRead, Issue
 from app.api.deps import get_current_user
 from app.orchestrators.arena import ArenaOrchestrator
 from app.utils.access import verify_project_access
+from app.utils.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +108,18 @@ async def create_arena_session(
             }
         )
 
-    # Waliduj strukturę każdej konfiguracji roli (musi mieć provider i model)
+    # Waliduj strukturę każdej konfiguracji roli (musi mieć provider, model i prompt)
     for schema_name, schema_config in [("A", arena_data.schema_a_config), ("B", arena_data.schema_b_config)]:
         for role, config in schema_config.items():
-            if "provider" not in config or "model" not in config:
+            if "provider" not in config or "model" not in config or "prompt" not in config:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Schema {schema_name}, rola '{role}': brakuje 'provider' lub 'model'"
+                    detail=f"Schema {schema_name}, rola '{role}': brakuje 'provider', 'model' lub 'prompt'"
+                )
+            if not str(config.get("prompt", "")).strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Schema {schema_name}, rola '{role}': prompt nie może być pusty"
                 )
 
     # Konwertuj AgentConfig do dict dla zapisu w JSON column
@@ -324,6 +330,11 @@ async def get_arena_rankings(
     Returns:
         Lista SchemaRating posortowana według ELO (malejąco)
     """
+    cache_key = f"arena:rankings:limit:{limit}:min_games:{min_games}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     # Query z filtrem i sortowaniem
     stmt = (
         select(SchemaRating)
@@ -334,7 +345,7 @@ async def get_arena_rankings(
 
     ratings = session.exec(stmt).all()
 
-    return [
+    response = [
         SchemaRatingRead(
             id=rating.id,
             schema_hash=rating.schema_hash,
@@ -351,6 +362,9 @@ async def get_arena_rankings(
         )
         for rating in ratings
     ]
+
+    cache.set(cache_key, [item.model_dump() for item in response])
+    return response
 
 
 @router.get("/sessions", response_model=list[ArenaSessionRead])
@@ -433,6 +447,11 @@ async def get_arena_stats(
     Returns:
         Dict ze statystykami Arena
     """
+    cache_key = "arena:stats"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     # Całkowita liczba sesji z głosami
     total_votes_stmt = select(func.count(ArenaSession.id)).where(ArenaSession.winner.isnot(None))
     total_votes = session.exec(total_votes_stmt).one()
@@ -463,7 +482,7 @@ async def get_arena_stats(
     )
     recent_votes = session.exec(recent_votes_stmt).all()
 
-    return {
+    response = {
         "total_votes": total_votes,
         "unique_voters": unique_voters,
         "total_schemas": total_schemas,
@@ -486,3 +505,6 @@ async def get_arena_stats(
             for v in recent_votes
         ]
     }
+
+    cache.set(cache_key, response)
+    return response

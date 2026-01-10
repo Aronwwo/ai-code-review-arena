@@ -12,7 +12,7 @@
  * i pozwala użytkownikowi wybrać który schemat działał lepiej.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
@@ -21,8 +21,10 @@ import { Label } from '@/components/ui/Label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Shield, Zap, Paintbrush, Code, Swords, Loader2, AlertTriangle } from 'lucide-react';
+import { Textarea } from '@/components/ui/Textarea';
 import { toast } from 'sonner';
-import { getProviders, CustomProvider } from '@/pages/Settings';
+import { getProviders, CustomProvider } from '@/lib/providers';
+import { parseApiError } from '@/lib/errorParser';
 import type { AgentConfig } from '@/types';
 
 interface SchemaConfig {
@@ -72,16 +74,16 @@ export function ArenaSetupDialog({
   // Domyślna konfiguracja - oba schematy z Ollama
   const [config, setConfig] = useState<ArenaConfig>({
     schema_a: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
     },
     schema_b: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
     },
   });
 
@@ -107,7 +109,7 @@ export function ArenaSetupDialog({
     staleTime: 0,
   });
 
-  const ollamaModels = ollamaModelsData?.models || [];
+  const ollamaModels = useMemo(() => ollamaModelsData?.models || [], [ollamaModelsData?.models]);
 
   // Aktualizuj domyślny model gdy załadują się modele Ollama
   useEffect(() => {
@@ -158,6 +160,10 @@ export function ArenaSetupDialog({
           toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: wybierz model dla ${role.name}`);
           return;
         }
+        if (!agent.prompt.trim()) {
+          toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: uzupełnij prompt dla ${role.name}`);
+          return;
+        }
       }
     }
 
@@ -175,9 +181,9 @@ export function ArenaSetupDialog({
       toast.success('Arena rozpoczęta! Dwa review uruchomione równolegle.');
       onArenaStarted(sessionId);
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Arena start error:', error);
-      toast.error(error.response?.data?.detail || 'Nie udało się rozpocząć Arena');
+      toast.error(parseApiError(error, 'Nie udało się rozpocząć Arena'));
     } finally {
       setSubmitting(false);
     }
@@ -234,40 +240,52 @@ export function ArenaSetupDialog({
                         </CardTitle>
                         <CardDescription>{role.description}</CardDescription>
                       </CardHeader>
-                      <CardContent className="grid grid-cols-2 gap-4">
-                        {/* Provider */}
-                        <div>
-                          <Label>Provider</Label>
-                          <select
-                            className="w-full mt-1.5 px-3 py-2 bg-background border rounded-md"
-                            value={agent.provider}
-                            onChange={(e) => {
-                              const newProvider = e.target.value;
-                              const models = getModelsForProvider(newProvider);
-                              updateAgent(schema, role.id, {
-                                provider: newProvider,
-                                model: models[0] || '',
-                              });
-                            }}
-                          >
-                            {providers.map(p => (
-                              <option key={p.id} value={p.id}>{p.id}</option>
-                            ))}
-                          </select>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Provider */}
+                          <div>
+                            <Label>Provider</Label>
+                            <select
+                              className="w-full mt-1.5 px-3 py-2 bg-background border rounded-md"
+                              value={agent.provider}
+                              onChange={(e) => {
+                                const newProvider = e.target.value;
+                                const models = getModelsForProvider(newProvider);
+                                updateAgent(schema, role.id, {
+                                  provider: newProvider,
+                                  model: models[0] || '',
+                                });
+                              }}
+                            >
+                              {providers.map(p => (
+                                <option key={p.id} value={p.id}>{p.id}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Model */}
+                          <div>
+                            <Label>Model</Label>
+                            <select
+                              className="w-full mt-1.5 px-3 py-2 bg-background border rounded-md"
+                              value={agent.model}
+                              onChange={(e) => updateAgent(schema, role.id, { model: e.target.value })}
+                            >
+                              {getModelsForProvider(agent.provider).map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
 
-                        {/* Model */}
                         <div>
-                          <Label>Model</Label>
-                          <select
-                            className="w-full mt-1.5 px-3 py-2 bg-background border rounded-md"
-                            value={agent.model}
-                            onChange={(e) => updateAgent(schema, role.id, { model: e.target.value })}
-                          >
-                            {getModelsForProvider(agent.provider).map(m => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
+                          <Label>Prompt</Label>
+                          <Textarea
+                            className="w-full mt-1.5 min-h-[90px]"
+                            value={agent.prompt}
+                            onChange={(e) => updateAgent(schema, role.id, { prompt: e.target.value })}
+                            placeholder="Instrukcje dla roli w schemacie"
+                          />
                         </div>
                       </CardContent>
                     </Card>

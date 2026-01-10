@@ -5,12 +5,13 @@ from datetime import datetime, UTC
 from sqlmodel import Session, select
 from pydantic import BaseModel, ValidationError
 from app.models.conversation import Conversation, Message
-from app.models.review import Review, Issue
+from app.models.review import Review, Issue, AgentConfig, ReviewAgent
 from app.models.project import Project
 from app.models.file import File
 from app.providers.base import LLMMessage
 from app.providers.router import provider_router
 from app.config import settings
+from app.utils.websocket import ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +26,50 @@ class ArenaVerdictSchema(BaseModel):
 
 class CouncilIssueSchema(BaseModel):
     """Schema for council-generated issue."""
-    severity: str
     category: str
-    title: str
+    severity: str
     description: str
     suggested_code: str | None = None
-    explanation: str
+
+
+class CouncilFollowupSchema(BaseModel):
+    """Schema for moderator follow-up questions."""
+    agent_role: str
+    question: str
 
 
 class CouncilSummarySchema(BaseModel):
     """Schema for council summary."""
     issues: list[CouncilIssueSchema]
     summary: str
+    followups: list[CouncilFollowupSchema] | None = None
 
 
 class ConversationOrchestrator:
     """Orchestrates agent conversations in council and arena modes."""
 
-    COUNCIL_AGENTS = ["Recenzent Ogólny", "Ekspert Bezpieczeństwa", "Analityk Wydajności", "Specjalista Jakości Kodu"]
+    COUNCIL_ROLES = [
+        {
+            "id": "general",
+            "name": "Recenzent Ogólny",
+            "prompt": "Skup się na ogólnej jakości kodu, błędach logicznych i najlepszych praktykach."
+        },
+        {
+            "id": "security",
+            "name": "Ekspert Bezpieczeństwa",
+            "prompt": "Skup się na podatnościach (SQLi/XSS), auth/authz, ekspozycji danych i konfiguracjach."
+        },
+        {
+            "id": "performance",
+            "name": "Analityk Wydajności",
+            "prompt": "Skup się na wydajności, złożoności, N+1, pamięci i możliwościach cache."
+        },
+        {
+            "id": "style",
+            "name": "Specjalista Jakości Kodu",
+            "prompt": "Skup się na spójności, czytelności, konwencjach i code smellach."
+        },
+    ]
 
     PROSECUTOR_PROMPT = """Jesteś Prokuratorem w debacie o przeglądzie kodu. Twoją rolą jest argumentowanie, dlaczego zgłoszony problem jest poważny i powinien zostać naprawiony.
 
@@ -87,23 +114,26 @@ WAŻNE: Pole "moderator_comment" musi być po polsku. Zwróć TYLKO poprawny JSO
 
 WAŻNE: NIE analizujesz kodu bezpośrednio. Twoje zadanie to TYLKO synteza wypowiedzi agentów.
 Bazuj WYŁĄCZNIE na tym co powiedzieli agenci - nie dodawaj własnych obserwacji o kodzie.
+Usuń powtórzenia, podkreśl rozbieżności. Jeśli rozbieżności są istotne, zaproponuj maksymalnie po 1 krótkim pytaniu doprecyzowującym na agenta.
 
 Zsyntetyzuj ich spostrzeżenia w ustrukturyzowane podsumowanie JSON:
 {
   "issues": [
     {
       "severity": "info" | "warning" | "error",
-      "category": "security" | "performance" | "style" | "best-practices" | etc,
-      "title": "Krótki tytuł po polsku",
+      "category": "security" | "performance" | "style",
       "description": "Szczegółowy opis po polsku",
-      "suggested_code": "Opcjonalna sugestia kodu",
-      "explanation": "Dlaczego to jest ważne - po polsku"
+      "suggested_code": "Opcjonalna sugestia kodu"
     }
   ],
-  "summary": "Ogólna ocena i kluczowe wnioski po polsku"
+  "summary": "Ogólna ocena i kluczowe wnioski po polsku",
+  "followups": [
+    {"agent_role": "general|security|performance|style", "question": "krótkie pytanie doprecyzowujące"}
+  ]
 }
 
-WAŻNE: Wszystkie teksty (title, description, explanation, summary) muszą być PO POLSKU.
+Jeśli nie potrzeba doprecyzowań, zwróć pustą listę followups.
+WAŻNE: Wszystkie teksty muszą być PO POLSKU.
 Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
 
     def __init__(self, session: Session):
@@ -165,76 +195,208 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
         self,
         conversation: Conversation,
         provider_name: str | None,
-        model: str | None
+        model: str | None,
+        agent_configs: dict[str, AgentConfig] | None = None,
+        moderator_config: AgentConfig | None = None,
+        review_agents: dict[str, ReviewAgent] | None = None,
+        rounds: int | None = None,
+        api_keys: dict[str, str] | None = None
     ):
         """Run cooperative council discussion.
 
         Args:
             conversation: Conversation object
-            provider_name: LLM provider
-            model: Model name
+            provider_name: Default LLM provider
+            model: Default model
+            agent_configs: Optional per-agent configs (provider/model/prompt)
+            moderator_config: Optional moderator config
+            review_agents: Optional ReviewAgent map to update with outputs
+            rounds: Optional number of council rounds
         """
-        # Get context
         context = await self._build_context(conversation)
-
-        # Run single round of discussion (optimized for demo)
+        total_rounds = rounds or settings.council_rounds
         turn_index = 0
-        for agent_name in self.COUNCIL_AGENTS:
-            logger.info(f"👤 AGENT TURN | Agent: {agent_name} | Turn: {turn_index} | Mode: council")
 
-            # Build messages for this agent
-            system_prompt = f"""Jesteś {agent_name} uczestniczącym w współpracującej dyskusji o przeglądzie kodu.
+        for round_index in range(total_rounds):
+            for role in self.COUNCIL_ROLES:
+                role_id = role["id"]
+                role_name = role["name"]
+                base_prompt = role["prompt"]
 
-Poprzedni kontekst dyskusji:
-{self._get_conversation_history(conversation)}
+                agent_config = agent_configs.get(role_id) if agent_configs else None
+                custom_prompt = agent_config.prompt if agent_config else ""
 
-Przedstaw swoją perspektywę na kod. Rozwijaj to, co powiedzieli inni. Bądź zwięzły, ale wnikliwy.
+                history = self._get_conversation_history(conversation)
+                system_prompt = (
+                    f"Jesteś {role_name} uczestniczącym w współpracującej dyskusji o przeglądzie kodu.\n\n"
+                    f"Rola: {base_prompt}\n"
+                )
+                if custom_prompt:
+                    system_prompt += f"\nDodatkowe instrukcje:\n{custom_prompt}\n"
 
-WAŻNE: Odpowiadaj TYLKO po polsku. Maksymalnie 3-4 zdania."""
+                system_prompt += (
+                    f"\nPoprzedni kontekst dyskusji:\n{history}\n\n"
+                    "Przedstaw swoją perspektywę na kod. Rozwijaj to, co powiedzieli inni. "
+                    "Bądź zwięzły, ale wnikliwy.\n\n"
+                    "WAŻNE: Odpowiadaj TYLKO po polsku. Maksymalnie 3-4 zdania."
+                )
 
-            messages = [
-                LLMMessage(role="system", content=system_prompt),
-                LLMMessage(role="user", content=f"Kontekst kodu:\n{context}\n\nPodziel się swoją analizą:")
-            ]
+                messages = [
+                    LLMMessage(role="system", content=system_prompt),
+                    LLMMessage(
+                        role="user",
+                        content=(
+                            f"Kontekst kodu:\n{context}\n\n"
+                            f"Runda {round_index + 1}/{total_rounds}.\n"
+                            "Podziel się swoją analizą:"
+                        )
+                    )
+                ]
 
-            logger.debug(
-                f"📝 AGENT PROMPT | Agent: {agent_name} | "
-                f"System prompt length: {len(system_prompt)} | "
-                f"Context length: {len(context)} | "
-                f"History length: {len(self._get_conversation_history(conversation))}"
-            )
+                effective_provider = agent_config.provider if agent_config else provider_name
+                effective_model = agent_config.model if agent_config else model
+                custom_provider_config = agent_config.custom_provider if agent_config else None
 
-            # Generate response
-            response, used_provider, used_model = await provider_router.generate(
-                messages=messages,
-                provider_name=provider_name,
-                model=model,
-                temperature=0.3,  # Some creativity for discussion
-                max_tokens=512  # Reduced for faster responses
-            )
+                logger.info(
+                    f"👤 AGENT TURN | Agent: {role_name} | "
+                    f"Round: {round_index + 1}/{total_rounds} | Turn: {turn_index} | Mode: council"
+                )
 
-            logger.info(
-                f"✅ AGENT RESPONSE | Agent: {agent_name} | "
-                f"Provider: {used_provider} | Model: {used_model} | "
-                f"Response length: {len(response)} chars"
-            )
+                if conversation.review_id and round_index == 0:
+                    await ws_manager.send_agent_started(conversation.review_id, role_id)
 
-            # Store message
-            message = Message(
-                conversation_id=conversation.id,
-                sender_type="agent",
-                sender_name=agent_name,
-                turn_index=turn_index,
-                content=response,
-                is_summary=False
-            )
-            self.session.add(message)
-            turn_index += 1
+                response, used_provider, used_model = await provider_router.generate(
+                    messages=messages,
+                    provider_name=effective_provider,
+                    model=effective_model,
+                    temperature=0.3,
+                    max_tokens=512,
+                    custom_provider_config=custom_provider_config,
+                    api_key=api_keys.get(effective_provider) if api_keys and effective_provider else None
+                )
 
-        self.session.commit()
+                logger.info(
+                    f"✅ AGENT RESPONSE | Agent: {role_name} | "
+                    f"Provider: {used_provider} | Model: {used_model} | "
+                    f"Response length: {len(response)} chars"
+                )
 
-        # Moderator synthesis
-        await self._council_moderator_synthesis(conversation, context, provider_name, model)
+                message = Message(
+                    conversation_id=conversation.id,
+                    sender_type="agent",
+                    sender_name=role_name,
+                    turn_index=turn_index,
+                    content=response,
+                    is_summary=False
+                )
+                self.session.add(message)
+                self.session.commit()
+
+                if review_agents and role_id in review_agents:
+                    agent_record = review_agents[role_id]
+                    agent_record.provider = used_provider
+                    agent_record.model = used_model
+                    agent_record.raw_output = response[:50000]
+                    agent_record.parsed_successfully = True if response.strip() else False
+                    self.session.add(agent_record)
+                    self.session.commit()
+
+                if conversation.review_id and round_index == total_rounds - 1:
+                    await ws_manager.send_agent_completed(
+                        conversation.review_id,
+                        role_id,
+                        0,
+                        True if response.strip() else False
+                    )
+
+                turn_index += 1
+
+        followup_data = await self._council_moderator_synthesis(
+            conversation=conversation,
+            context=context,
+            provider_name=provider_name,
+            model=model,
+            moderator_config=moderator_config,
+            allow_followups=True,
+            api_keys=api_keys
+        )
+
+        followups = followup_data.followups or []
+        if followups:
+            seen_roles: set[str] = set()
+            for followup in followups:
+                role_id = followup.agent_role
+                if role_id in seen_roles:
+                    continue
+                seen_roles.add(role_id)
+
+                role_def = next((r for r in self.COUNCIL_ROLES if r["id"] == role_id), None)
+                if not role_def:
+                    continue
+
+                role_name = role_def["name"]
+                agent_config = agent_configs.get(role_id) if agent_configs else None
+                custom_prompt = agent_config.prompt if agent_config else ""
+
+                system_prompt = (
+                    f"Jesteś {role_name} w dyskusji rady.\n"
+                    "Odpowiedz krótko i rzeczowo na pytanie moderatora.\n"
+                )
+                if custom_prompt:
+                    system_prompt += f"\nDodatkowe instrukcje:\n{custom_prompt}\n"
+
+                messages = [
+                    LLMMessage(role="system", content=system_prompt),
+                    LLMMessage(
+                        role="user",
+                        content=(
+                            f"Historia dyskusji:\n{self._get_conversation_history(conversation)}\n\n"
+                            f"Pytanie moderatora:\n{followup.question}"
+                        )
+                    )
+                ]
+
+                response, used_provider, used_model = await provider_router.generate(
+                    messages=messages,
+                    provider_name=agent_config.provider if agent_config else provider_name,
+                    model=agent_config.model if agent_config else model,
+                    temperature=0.2,
+                    max_tokens=256,
+                    custom_provider_config=agent_config.custom_provider if agent_config else None,
+                    api_key=api_keys.get(agent_config.provider) if api_keys and agent_config else None
+                )
+
+                message = Message(
+                    conversation_id=conversation.id,
+                    sender_type="agent",
+                    sender_name=role_name,
+                    turn_index=turn_index,
+                    content=response,
+                    is_summary=False
+                )
+                self.session.add(message)
+                self.session.commit()
+
+                if review_agents and role_id in review_agents:
+                    agent_record = review_agents[role_id]
+                    agent_record.provider = used_provider
+                    agent_record.model = used_model
+                    agent_record.raw_output = response[:50000]
+                    agent_record.parsed_successfully = True if response.strip() else False
+                    self.session.add(agent_record)
+                    self.session.commit()
+
+                turn_index += 1
+
+        await self._council_moderator_synthesis(
+            conversation=conversation,
+            context=context,
+            provider_name=provider_name,
+            model=model,
+            moderator_config=moderator_config,
+            allow_followups=False,
+            api_keys=api_keys
+        )
 
     async def _run_arena_mode(
         self,
@@ -338,8 +500,11 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
         conversation: Conversation,
         context: str,
         provider_name: str | None,
-        model: str | None
-    ):
+        model: str | None,
+        moderator_config: AgentConfig | None = None,
+        allow_followups: bool = True,
+        api_keys: dict[str, str] | None = None
+    ) -> CouncilSummarySchema:
         """Generate moderator synthesis for council mode.
 
         IMPORTANT: Moderator ONLY analyzes agent discussions, NOT code directly.
@@ -350,55 +515,75 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
             context: Code context (NOT used by moderator - only for reference)
             provider_name: LLM provider
             model: Model name
+            moderator_config: Optional moderator config
+            allow_followups: Whether moderator can suggest follow-ups
         """
         discussion_history = self._get_conversation_history(conversation)
 
         # FIXED: Moderator receives ONLY agent discussions, NOT code
         # This follows specification requirement: "Moderator NIE analizuje kodu bezpośrednio"
+        system_prompt = self.MODERATOR_COUNCIL_PROMPT
+        if not allow_followups:
+            system_prompt += "\n\nWAŻNE: Pole followups MUSI być pustą listą."
+        if moderator_config and moderator_config.prompt:
+            system_prompt += f"\n\nDodatkowe instrukcje moderatora:\n{moderator_config.prompt}"
+
         messages = [
-            LLMMessage(role="system", content=self.MODERATOR_COUNCIL_PROMPT),
-            LLMMessage(role="user", content=f"Dyskusja agentów:\n{discussion_history}\n\nDostarcz swoją syntezę w formacie JSON:")
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(
+                role="user",
+                content=f"Dyskusja agentów:\n{discussion_history}\n\nDostarcz swoją syntezę w formacie JSON:"
+            )
         ]
 
         logger.info(f"🎭 MODERATOR SYNTHESIS | Mode: council | Discussion length: {len(discussion_history)} chars")
 
-        response, _, _ = await provider_router.generate(
+        response, used_provider, used_model = await provider_router.generate(
             messages=messages,
-            provider_name=provider_name,
-            model=model,
+            provider_name=moderator_config.provider if moderator_config else provider_name,
+            model=moderator_config.model if moderator_config else model,
             temperature=0.0,  # Deterministic
-            max_tokens=1024  # Reduced for faster synthesis
+            max_tokens=1024,  # Reduced for faster synthesis
+            custom_provider_config=moderator_config.custom_provider if moderator_config else None,
+            api_key=api_keys.get(moderator_config.provider) if api_keys and moderator_config else None
         )
 
-        # Parse and store summary
+        summary_obj: CouncilSummarySchema
         try:
             data = json.loads(response)
             summary_obj = CouncilSummarySchema(**data)
-            summary_text = json.dumps(data, indent=2)
         except json.JSONDecodeError as e:
             logger.warning(f"Council summary JSON decode error: {str(e)[:200]}")
             logger.debug(f"Raw response preview: {response[:500]}...")
-            # Fallback
-            summary_text = response
+            summary_obj = CouncilSummarySchema(issues=[], summary=response, followups=[])
         except ValidationError as e:
             logger.error(f"Council summary validation error: {e.errors()}")
-            # Fallback
-            summary_text = response
+            summary_obj = CouncilSummarySchema(issues=[], summary=response, followups=[])
 
+        if allow_followups:
+            logger.info(
+                f"🧭 MODERATOR FOLLOWUPS | Provider: {used_provider} | Model: {used_model} | "
+                f"Followups: {len(summary_obj.followups or [])}"
+            )
+            return summary_obj
+
+        summary_obj.followups = []
+        summary_text = json.dumps(summary_obj.model_dump(), indent=2)
         conversation.summary = summary_text
 
-        # Store moderator message
         message = Message(
             conversation_id=conversation.id,
             sender_type="moderator",
             sender_name="Moderator",
             turn_index=999,
-            content=response,
+            content=summary_text,
             is_summary=True
         )
         self.session.add(message)
         self.session.add(conversation)
         self.session.commit()
+
+        return summary_obj
 
     async def _arena_moderator_verdict(
         self,

@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
-import type { SchemaRating } from '@/types';
+import type { SchemaRating, AgentConfig } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -98,9 +98,9 @@ export function ArenaRankings() {
     return 'text-red-600';
   };
 
-  const getSchemaName = (schemaConfig: Record<string, any>) => {
+  const getSchemaName = (schemaConfig: Record<string, AgentConfig>) => {
     // Generate a short name based on the models used
-    const models = Object.values(schemaConfig).map((c: any) => c.model);
+    const models = Object.values(schemaConfig).map((c) => c.model);
     const uniqueModels = [...new Set(models)];
 
     if (uniqueModels.length === 1) {
@@ -284,7 +284,7 @@ export function ArenaRankings() {
                           Konfiguracja ról:
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {Object.entries(schema.schema_config).map(([role, config]: [string, any]) => {
+                          {Object.entries(schema.schema_config as Record<string, AgentConfig>).map(([role, config]) => {
                             const Icon = ROLE_ICONS[role as keyof typeof ROLE_ICONS] || Zap;
                             const label = ROLE_LABELS[role as keyof typeof ROLE_LABELS] || role;
 

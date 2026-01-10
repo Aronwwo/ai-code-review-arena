@@ -70,8 +70,8 @@ def auth_headers_fixture(client: TestClient):
         "/auth/register",
         json={
             "email": "test@example.com",
-            "password": "testpassword123",
-            "full_name": "Test User"
+            "username": "testuser",
+            "password": "Testpassword123"
         }
     )
     assert register_response.status_code == 201
@@ -81,7 +81,7 @@ def auth_headers_fixture(client: TestClient):
         "/auth/login",
         json={
             "email": "test@example.com",
-            "password": "testpassword123"
+            "password": "Testpassword123"
         }
     )
     assert login_response.status_code == 200

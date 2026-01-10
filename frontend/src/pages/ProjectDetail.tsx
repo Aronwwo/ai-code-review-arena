@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import { Project, FileWithContent, FileCreate, Review, ReviewCreate } from '@/types';
+import { Project, FileWithContent, FileCreate, Review, ReviewCreate, AgentConfig } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -15,10 +15,11 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { CodeViewer } from '@/components/CodeViewer';
 import { CodeEditor } from '@/components/CodeEditor';
-import { ReviewConfigDialog } from '@/components/ReviewConfigDialog';
-import { getProviders } from '@/pages/Settings';
+import { ReviewConfigDialog, ReviewConfig } from '@/components/ReviewConfigDialog';
+import { getProviders } from '@/lib/providers';
 import { Plus, FileCode, Play, ArrowLeft, Loader2, Upload, Trash2, Edit, Eye, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -68,8 +69,8 @@ export function ProjectDetail() {
       setNewFileLanguage('');
       toast.success('Plik dodany pomyślnie!');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się dodać pliku');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się dodać pliku'));
     },
   });
 
@@ -84,8 +85,8 @@ export function ProjectDetail() {
       toast.success('Przegląd uruchomiony pomyślnie!');
       navigate(`/reviews/${data.id}`);
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się uruchomić przeglądu');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się uruchomić przeglądu'));
     },
   });
 
@@ -103,8 +104,8 @@ export function ProjectDetail() {
       }
       toast.success('Plik zapisany pomyślnie!');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się zapisać pliku');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się zapisać pliku'));
     },
   });
 
@@ -118,8 +119,8 @@ export function ProjectDetail() {
       setSelectedFile(null);
       toast.success('Plik usunięty pomyślnie!');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się usunąć pliku');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się usunąć pliku'));
     },
   });
 
@@ -173,7 +174,7 @@ export function ProjectDetail() {
     });
   };
 
-  const handleStartReview = async (config: any) => {
+  const handleStartReview = async (config: ReviewConfig) => {
     // Get all providers (including custom ones)
     const providers = getProviders();
 
@@ -205,17 +206,17 @@ export function ProjectDetail() {
     };
 
     // Build agent configs from dialog config
-    const agentConfigs: Record<string, any> = {};
+    const agentConfigs: Record<string, AgentConfig> = {};
     const enabledRoles: string[] = [];
 
-    for (const [role, agentConfig] of Object.entries(config.agents)) {
-      const agent = agentConfig as any;
+    for (const [role, agent] of Object.entries(config.agents)) {
       if (agent.enabled) {
         enabledRoles.push(role);
         const customProvider = getCustomProviderConfig(agent.provider);
         agentConfigs[role] = {
           provider: agent.provider,
           model: agent.model,
+          prompt: agent.prompt,
           temperature: 0.2,
           max_tokens: 2048,
           custom_provider: customProvider,
@@ -225,9 +226,12 @@ export function ProjectDetail() {
 
     // Add moderator config
     const moderatorCustomProvider = getCustomProviderConfig(config.moderator.provider);
-    agentConfigs['moderator'] = {
+    const moderatorConfig = {
       provider: config.moderator.provider,
       model: config.moderator.model,
+      prompt: config.moderator.prompt,
+      temperature: 0.0,
+      max_tokens: 1024,
       custom_provider: moderatorCustomProvider,
     };
 
@@ -245,16 +249,17 @@ export function ProjectDetail() {
         queryClient.invalidateQueries({ queryKey: ['arena-sessions'] });
         toast.success('Arena session started!');
         navigate(`/arena/sessions/${response.data.id}`);
-      } catch (error: any) {
-        toast.error(error.response?.data?.detail || 'Failed to start Arena session');
+      } catch (error: unknown) {
+        toast.error(parseApiError(error, 'Failed to start Arena session'));
       }
     } else {
       // Council mode - send to POST /projects/{id}/reviews
       startReviewMutation.mutate({
+        review_mode: 'council',
+        moderator_type: config.moderator.type,
         agent_roles: enabledRoles,
         agent_configs: agentConfigs,
-        conversation_mode: config.mode,
-        moderator_type: config.moderator.type,
+        moderator_config: moderatorConfig,
         api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
       });
     }
