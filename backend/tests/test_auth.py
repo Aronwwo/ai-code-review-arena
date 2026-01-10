@@ -1,29 +1,15 @@
 """Tests for authentication endpoints."""
 import pytest
-from fastapi.testclient import TestClient
-from app.main import app
-from app.database import engine
-from sqlmodel import SQLModel, Session
-
-client = TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def setup_database():
-    """Setup test database."""
-    SQLModel.metadata.create_all(engine)
-    yield
-    SQLModel.metadata.drop_all(engine)
-
-
-def test_register_user():
+def test_register_user(client):
     """Test user registration."""
     response = client.post(
         "/auth/register",
         json={
             "email": "test@example.com",
             "username": "testuser",
-            "password": "testpass123"
+            "password": "Testpass123"
         }
     )
     assert response.status_code == 201
@@ -33,7 +19,7 @@ def test_register_user():
     assert "id" in data
 
 
-def test_register_duplicate_email():
+def test_register_duplicate_email(client):
     """Test registration with duplicate email."""
     # First registration
     client.post(
@@ -41,7 +27,7 @@ def test_register_duplicate_email():
         json={
             "email": "test@example.com",
             "username": "testuser1",
-            "password": "testpass123"
+            "password": "Testpass123"
         }
     )
 
@@ -51,14 +37,14 @@ def test_register_duplicate_email():
         json={
             "email": "test@example.com",
             "username": "testuser2",
-            "password": "testpass123"
+            "password": "Testpass123"
         }
     )
     assert response.status_code == 400
-    assert "already registered" in response.json()["detail"].lower()
+    assert "zarejestrowany" in response.json()["detail"].lower() or "already registered" in response.json()["detail"].lower()
 
 
-def test_login():
+def test_login(client):
     """Test user login."""
     # Register first
     client.post(
@@ -66,7 +52,7 @@ def test_login():
         json={
             "email": "test@example.com",
             "username": "testuser",
-            "password": "testpass123"
+            "password": "Testpass123"
         }
     )
 
@@ -75,7 +61,7 @@ def test_login():
         "/auth/login",
         json={
             "email": "test@example.com",
-            "password": "testpass123"
+            "password": "Testpass123"
         }
     )
     assert response.status_code == 200
@@ -84,13 +70,13 @@ def test_login():
     assert data["token_type"] == "bearer"
 
 
-def test_login_invalid_credentials():
+def test_login_invalid_credentials(client):
     """Test login with invalid credentials."""
     response = client.post(
         "/auth/login",
         json={
             "email": "nonexistent@example.com",
-            "password": "wrongpassword"
+            "password": "WrongPassword123"
         }
     )
     assert response.status_code == 401

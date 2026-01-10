@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { Plus, FolderGit2, FileCode, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -56,8 +57,8 @@ export function Projects() {
       setNewProjectDescription('');
       toast.success('Projekt utworzony pomyślnie!');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się utworzyć projektu');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się utworzyć projektu'));
     },
   });
 

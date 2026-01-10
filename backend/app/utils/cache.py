@@ -96,6 +96,25 @@ class CacheManager:
         # Fallback to memory cache
         _memory_cache.clear()
 
+    def delete_prefix(self, prefix: str):
+        """Delete cache keys with the given prefix."""
+        if self.redis_client:
+            try:
+                cursor = 0
+                while True:
+                    cursor, keys = self.redis_client.scan(cursor=cursor, match=f"{prefix}*")
+                    if keys:
+                        self.redis_client.delete(*keys)
+                    if cursor == 0:
+                        break
+                return
+            except Exception as e:
+                print(f"Redis delete_prefix error: {e}")
+
+        keys_to_delete = [key for key in _memory_cache.keys() if key.startswith(prefix)]
+        for key in keys_to_delete:
+            del _memory_cache[key]
+
     @staticmethod
     def generate_llm_cache_key(
         provider: str,

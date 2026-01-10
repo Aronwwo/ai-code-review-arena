@@ -1,7 +1,7 @@
 """Review, Issue, and Suggestion models."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING, Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
 
@@ -10,25 +10,58 @@ if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.file import File
     from app.models.conversation import Conversation
+    from app.models.arena import ArenaSession
 
 
 ReviewStatus = Literal["pending", "running", "completed", "failed"]
+ReviewMode = Literal["council", "combat_arena"]
+ModeratorType = Literal["debate", "consensus", "strategic"]
 IssueSeverity = Literal["info", "warning", "error"]
 IssueStatus = Literal["open", "confirmed", "dismissed", "resolved"]
 
 
 class Review(SQLModel, table=True):
-    """Code review performed by AI agents."""
+    """Code review performed by AI agents.
+
+    Wspiera dwa tryby:
+    - Council Mode: Agenci współpracują, jeden zestaw konfiguracji
+    - Combat Arena: Review jest częścią porównania dwóch schematów (A vs B)
+    """
 
     __tablename__ = "reviews"
 
+    # Podstawowe pola
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="projects.id", index=True)
     status: str = Field(default="pending", index=True)
     created_by: int = Field(foreign_key="users.id", index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     error_message: str | None = Field(default=None, max_length=2000)
+
+    # Nowe pola dla trybu Arena
+    review_mode: str = Field(
+        default="council",
+        max_length=20,
+        index=True,
+        description="Tryb review: 'council' (współpraca) lub 'combat_arena' (porównanie)"
+    )
+    moderator_type: str = Field(
+        default="debate",
+        max_length=20,
+        description="Typ moderatora: 'debate' (Moderator Debaty), 'consensus' (Syntezator), 'strategic' (Strategiczny)"
+    )
+    arena_schema_name: str | None = Field(
+        default=None,
+        max_length=1,
+        description="Nazwa schematu w Arena: 'A' lub 'B' (tylko dla combat_arena)"
+    )
+    arena_session_id: int | None = Field(
+        default=None,
+        foreign_key="arena_sessions.id",
+        index=True,
+        description="ID sesji Arena (tylko dla combat_arena)"
+    )
 
     # Relationships
     project: Project = Relationship(back_populates="reviews")
@@ -36,6 +69,8 @@ class Review(SQLModel, table=True):
     agents: ReviewAgent = Relationship(back_populates="review")
     issues: Issue = Relationship(back_populates="review")
     conversations: Conversation = Relationship(back_populates="review")
+    # arena_session_id jest foreign key, ale nie definiujemy Relationship
+    # aby uniknąć circular import issues (ArenaSession -> Review -> ArenaSession)
 
 
 class ReviewAgent(SQLModel, table=True):
@@ -50,7 +85,7 @@ class ReviewAgent(SQLModel, table=True):
     model: str = Field(max_length=100)
     raw_output: str | None = Field(default=None, max_length=50_000)
     parsed_successfully: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     review: Review = Relationship(back_populates="agents")
@@ -81,8 +116,8 @@ class Issue(SQLModel, table=True):
     final_severity: str | None = None  # Updated by arena
     moderator_comment: str | None = Field(default=None, max_length=2000)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     review: Review = Relationship(back_populates="issues")
@@ -99,7 +134,7 @@ class Suggestion(SQLModel, table=True):
     issue_id: int = Field(foreign_key="issues.id", index=True)
     suggested_code: str | None = Field(default=None, max_length=10_000)
     explanation: str = Field(max_length=2000)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     issue: Issue = Relationship(back_populates="suggestions")
@@ -123,6 +158,7 @@ class AgentConfig(SQLModel):
 
     provider: str
     model: str
+    prompt: str | None = None
     temperature: float = 0.2
     max_tokens: int = 2048
     # For custom providers
@@ -130,14 +166,73 @@ class AgentConfig(SQLModel):
 
 
 class ReviewCreate(SQLModel):
-    """Schema for creating a review."""
+    """Schema for creating a review.
 
-    agent_roles: list[str] = Field(default=["general"])  # general, security, performance, style
-    provider: str | None = None  # Deprecated: use agent_configs instead
-    model: str | None = None  # Deprecated: use agent_configs instead
-    agent_configs: dict[str, AgentConfig] | None = None  # Per-agent configuration
-    api_keys: dict[str, str] | None = None  # Optional API keys for providers (openai, anthropic, groq, etc.)
-    conversation_mode: str | None = None  # 'council' or 'arena' - mode for agent discussions
+    Wspiera dwa tryby:
+    1. Council Mode (review_mode='council'):
+       - Użyj agent_roles + agent_configs
+       - Agenci współpracują nad jednym review
+
+    2. Combat Arena (review_mode='combat_arena'):
+       - Użyj arena_config_a + arena_config_b
+       - Tworzy dwa osobne review do porównania
+       - Każdy schemat musi mieć wszystkie 4 role
+    """
+
+    # Wybór trybu
+    review_mode: ReviewMode = Field(
+        ...,
+        description="Tryb review: 'council' (współpraca) lub 'combat_arena' (porównanie A vs B)"
+    )
+    moderator_type: ModeratorType = Field(
+        ...,
+        description="Typ moderatora: 'debate' (Moderator Debaty), 'consensus' (Syntezator Konsensusu), 'strategic' (Strategiczny Koordynator)"
+    )
+
+    # === COUNCIL MODE ===
+    agent_roles: list[str] = Field(
+        default=["general"],
+        description="Role agentów dla Council Mode (general, security, performance, style)"
+    )
+    provider: str | None = Field(
+        default=None,
+        description="(Deprecated) Global provider - użyj agent_configs zamiast tego"
+    )
+    model: str | None = Field(
+        default=None,
+        description="(Deprecated) Global model - użyj agent_configs zamiast tego"
+    )
+    agent_configs: dict[str, AgentConfig] | None = Field(
+        default=None,
+        description="Konfiguracja per agent dla Council Mode: {role: config}"
+    )
+
+    moderator_config: AgentConfig | None = Field(
+        default=None,
+        description="Konfiguracja moderatora dla Council Mode"
+    )
+
+    # === COMBAT ARENA ===
+    arena_config_a: dict[str, AgentConfig] | None = Field(
+        default=None,
+        description="Schemat A dla Arena: musi zawierać wszystkie 4 role {general, security, performance, style}"
+    )
+    arena_config_b: dict[str, AgentConfig] | None = Field(
+        default=None,
+        description="Schemat B dla Arena: musi zawierać wszystkie 4 role {general, security, performance, style}"
+    )
+
+    # === WSPÓLNE ===
+    api_keys: dict[str, str] | None = Field(
+        default=None,
+        description="Klucze API dla providerów: {provider_name: api_key}"
+    )
+
+    # Pole conversation_mode zachowane dla kompatybilności wstecznej (DEPRECATED)
+    conversation_mode: str | None = Field(
+        default=None,
+        description="(Deprecated) Użyj review_mode zamiast tego"
+    )
 
 
 class ReviewRead(SQLModel):
@@ -152,6 +247,12 @@ class ReviewRead(SQLModel):
     error_message: str | None
     agent_count: int = 0
     issue_count: int = 0
+
+    # Nowe pola dla Arena
+    review_mode: ReviewMode = "council"
+    moderator_type: ModeratorType = "debate"
+    arena_schema_name: str | None = None
+    arena_session_id: int | None = None
 
 
 class ReviewAgentRead(SQLModel):

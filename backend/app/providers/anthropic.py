@@ -36,7 +36,7 @@ class AnthropicProvider(LLMProvider):
 
         Args:
             messages: List of conversation messages
-            model: Claude model name (default: claude-3-5-sonnet-20241022)
+            model: Claude model name (default: claude-3-5-sonnet-20250114)
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
 
@@ -47,7 +47,7 @@ class AnthropicProvider(LLMProvider):
             raise ValueError("Anthropic API key not configured")
 
         if model is None:
-            model = "claude-3-5-sonnet-20241022"
+            model = "claude-3-5-sonnet-20250114"  # Latest Claude 3.5 Sonnet (January 2025)
 
         # Separate system message from conversation
         system_message = ""

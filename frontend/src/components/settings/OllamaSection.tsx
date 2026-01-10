@@ -8,7 +8,7 @@ import { RefreshCw, AlertCircle, Cpu } from 'lucide-react';
 interface OllamaSectionProps {
   models: string[];
   isLoading: boolean;
-  error: any;
+  error: unknown;
   onRefresh: () => void;
   isCached?: boolean;
 }

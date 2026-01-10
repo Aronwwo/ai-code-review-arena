@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Sword, Trophy, AlertCircle, ThumbsUp, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
 import { cn } from '@/lib/utils';
 
 interface EvaluationCandidate {
@@ -125,8 +126,8 @@ export function ModelDuelCompare() {
         navigate('/rankings');
       }
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się zapisać głosu');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się zapisać głosu'));
     },
   });
 

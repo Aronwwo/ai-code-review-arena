@@ -2,12 +2,14 @@
 import json
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlmodel import Session, select, func
 from pydantic import BaseModel, ValidationError
 from app.models.project import Project
 from app.models.file import File
 from app.models.review import Review, ReviewAgent, Issue, Suggestion, IssueSeverity, AgentConfig
+from app.models.conversation import Conversation
+from app.orchestrators.conversation import ConversationOrchestrator
 from app.providers.base import LLMMessage
 from app.providers.router import provider_router, CustomProviderConfig
 from app.utils.cache import cache
@@ -49,8 +51,9 @@ Twoje obowiązki:
 - Sprawdzaj kompletność dokumentacji
 
 Analizuj kod z krytycznym, ale konstruktywnym podejściem.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość.""",
 
         "security": """Jesteś ekspertem ds. bezpieczeństwa, skupiającym się na identyfikacji luk w zabezpieczeniach.
 
@@ -63,8 +66,9 @@ Twoje obowiązki:
 - Sprawdzaj znane podatne zależności
 
 Bądź dokładny i ostrożny - bezpieczeństwo jest kluczowe.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość.""",
 
         "performance": """Jesteś ekspertem ds. wydajności, skupiającym się na możliwościach optymalizacji.
 
@@ -77,8 +81,9 @@ Twoje obowiązki:
 - Przeglądaj możliwości cache'owania
 
 Skup się na mierzalnym wpływie na wydajność.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość.""",
 
         "style": """Jesteś recenzentem stylu kodu, skupiającym się na spójności i konwencjach.
 
@@ -91,8 +96,9 @@ Twoje obowiązki:
 - Przeglądaj type hints i adnotacje
 
 Utrzymuj wysokie standardy jakości i spójności kodu.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU."""
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."""
     }
 
     def __init__(self, session: Session):
@@ -109,28 +115,76 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
         provider_name: str | None = None,
         model: str | None = None,
         api_keys: dict[str, str] | None = None,
-        agent_configs: dict[str, AgentConfig] | None = None
+        agent_configs: dict[str, AgentConfig] | None = None,
+        moderator_config: dict | None = None
     ) -> Review:
-        """Conduct a code review using multiple agents.
+        """Przeprowadź code review używając wielu agentów.
+
+        Ta metoda jest uniwersalna i obsługuje oba tryby:
+        - COUNCIL MODE: Wywoływana bezpośrednio przez API dla współpracy agentów
+        - COMBAT ARENA: Wywoływana przez ArenaOrchestrator dla każdego review (A i B)
+
+        Dispatcher trybu:
+        - Sprawdza review_mode i waliduje wymagane pola
+        - Arena review MUSZĄ mieć arena_session_id (tworzone przez ArenaOrchestrator)
+        - Council review NIE MOGĄ mieć arena_session_id (tworzone bezpośrednio)
 
         Args:
-            review_id: Review ID to conduct
-            provider_name: LLM provider to use
-            model: Model name to use
-            api_keys: Dict of provider name to API key
-            agent_configs: Per-agent configurations (may include custom_provider)
+            review_id: ID review do przeprowadzenia
+            provider_name: Provider LLM do użycia
+            model: Nazwa modelu do użycia
+            api_keys: Słownik: nazwa providera -> klucz API
+            agent_configs: Konfiguracje per agent (mogą zawierać custom_provider)
 
         Returns:
-            Completed Review object
+            Ukończony obiekt Review
+
+        Raises:
+            ValueError: Jeśli review nie istnieje lub walidacja trybu się nie powiodła
         """
-        # Get review and project
+        # Pobierz review i projekt
         review = self.session.get(Review, review_id)
         if not review:
-            raise ValueError(f"Review {review_id} not found")
+            raise ValueError(f"Review {review_id} nie istnieje")
 
         project = self.session.get(Project, review.project_id)
         if not project:
-            raise ValueError(f"Project {review.project_id} not found")
+            raise ValueError(f"Project {review.project_id} nie istnieje")
+
+        # === DISPATCHER TRYBU ===
+        # Walidacja i logowanie w zależności od review_mode
+        review_mode = review.review_mode or "council"  # Default to council dla starych review
+
+        if review_mode == "combat_arena":
+            # Arena review MUSI mieć arena_session_id (tworzone przez ArenaOrchestrator)
+            if not review.arena_session_id:
+                raise ValueError(
+                    f"Review {review_id} ma tryb 'combat_arena' ale brakuje arena_session_id. "
+                    f"Arena review muszą być tworzone przez ArenaOrchestrator, nie bezpośrednio."
+                )
+            logger.info(
+                f"Review {review_id}: tryb COMBAT ARENA, schemat {review.arena_schema_name}, "
+                f"sesja {review.arena_session_id}"
+            )
+
+        elif review_mode == "council":
+            # Council review NIE MOŻE mieć arena_session_id
+            if review.arena_session_id:
+                raise ValueError(
+                    f"Review {review_id} ma tryb 'council' ale ma arena_session_id. "
+                    f"Council review nie mogą być częścią sesji Arena."
+                )
+            logger.info(f"Review {review_id}: tryb COUNCIL MODE")
+
+        else:
+            # Nieznany tryb
+            raise ValueError(
+                f"Review {review_id} ma nieznany review_mode: '{review_mode}'. "
+                f"Dozwolone: 'council', 'combat_arena'"
+            )
+
+        # === KONIEC DISPATCHERA ===
+        # Od tego momentu logika jest wspólna dla obu trybów
 
         # Update review status
         review.status = "running"
@@ -146,41 +200,68 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
             agent_roles = [agent.role for agent in agents_list]
             await ws_manager.send_review_started(review_id, agent_roles)
 
-            # Run each agent with their configured provider/model
-            for agent in agents_list:
-                # Get agent config if available
-                agent_config = agent_configs.get(agent.role) if agent_configs else None
+            # Normalize configs
+            typed_agent_configs: dict[str, AgentConfig] | None = None
+            if agent_configs:
+                typed_agent_configs = {}
+                for role, config in agent_configs.items():
+                    typed_agent_configs[role] = config if isinstance(config, AgentConfig) else AgentConfig(**config)
 
-                # Use agent's provider/model if configured, otherwise fall back to parameters
-                agent_provider = agent.provider if agent.provider != "mock" else (provider_name or agent.provider)
-                agent_model = agent.model if agent.model != "default" else (model or agent.model)
-
-                # Get API key for this agent's provider
-                agent_api_key = None
-                if api_keys and agent_provider:
-                    agent_api_key = api_keys.get(agent_provider.lower())
-
-                # Get custom provider config if available
-                custom_provider_config = None
-                if agent_config and agent_config.custom_provider:
-                    cp = agent_config.custom_provider
-                    custom_provider_config = CustomProviderConfig(
-                        id=cp.id,
-                        name=cp.name,
-                        base_url=cp.base_url,
-                        api_key=cp.api_key,
-                        header_name=cp.header_name,
-                        header_prefix=cp.header_prefix
-                    )
-
-                await self._run_agent(
-                    review, project, agent, agent_provider, agent_model,
-                    agent_api_key, custom_provider_config
+            typed_moderator_config = None
+            if moderator_config:
+                typed_moderator_config = (
+                    moderator_config
+                    if isinstance(moderator_config, AgentConfig)
+                    else AgentConfig(**moderator_config)
                 )
+
+            if review_mode == "council":
+                await self._run_council_review(
+                    review=review,
+                    project=project,
+                    agents_list=agents_list,
+                    agent_configs=typed_agent_configs,
+                    moderator_config=typed_moderator_config,
+                    provider_name=provider_name,
+                    model=model,
+                    api_keys=api_keys
+                )
+            else:
+                # Run each agent with their configured provider/model (arena reviews)
+                for agent in agents_list:
+                    # Get agent config if available
+                    agent_config = typed_agent_configs.get(agent.role) if typed_agent_configs else None
+
+                    # Use agent's provider/model if configured, otherwise fall back to parameters
+                    agent_provider = agent.provider if agent.provider != "mock" else (provider_name or agent.provider)
+                    agent_model = agent.model if agent.model != "default" else (model or agent.model)
+
+                    # Get API key for this agent's provider
+                    agent_api_key = None
+                    if api_keys and agent_provider:
+                        agent_api_key = api_keys.get(agent_provider.lower())
+
+                    # Get custom provider config if available
+                    custom_provider_config = None
+                    if agent_config and agent_config.custom_provider:
+                        cp = agent_config.custom_provider
+                        custom_provider_config = CustomProviderConfig(
+                            id=cp.id,
+                            name=cp.name,
+                            base_url=cp.base_url,
+                            api_key=cp.api_key,
+                            header_name=cp.header_name,
+                            header_prefix=cp.header_prefix
+                        )
+
+                    await self._run_agent(
+                        review, project, agent, agent_provider, agent_model,
+                        agent_api_key, custom_provider_config
+                    )
 
             # Mark review as completed
             review.status = "completed"
-            review.completed_at = datetime.utcnow()
+            review.completed_at = datetime.now(UTC)
 
             # Get total issue count and send completed event
             issue_count_stmt = select(func.count(Issue.id)).where(Issue.review_id == review_id)
@@ -191,7 +272,7 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
             # Mark review as failed
             review.status = "failed"
             review.error_message = str(e)[:2000]
-            review.completed_at = datetime.utcnow()
+            review.completed_at = datetime.now(UTC)
 
             # Send failed event
             await ws_manager.send_review_failed(review_id, str(e)[:500])
@@ -298,6 +379,111 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
             len(issues_data),
             parsed_successfully
         )
+
+    async def _run_council_review(
+        self,
+        review: Review,
+        project: Project,
+        agents_list: list[ReviewAgent],
+        agent_configs: dict[str, AgentConfig] | None,
+        moderator_config: AgentConfig | None,
+        provider_name: str | None,
+        model: str | None,
+        api_keys: dict[str, str] | None
+    ):
+        """Run council review using multi-round conversation and moderator synthesis."""
+        # Create conversation
+        conversation = Conversation(
+            review_id=review.id,
+            mode="council",
+            topic_type="review",
+            status="running"
+        )
+        self.session.add(conversation)
+        self.session.commit()
+        self.session.refresh(conversation)
+
+        review_agents_map = {agent.role: agent for agent in agents_list}
+        conversation_orchestrator = ConversationOrchestrator(self.session)
+
+        try:
+            await conversation_orchestrator._run_council_mode(
+                conversation=conversation,
+                provider_name=provider_name,
+                model=model,
+                agent_configs=agent_configs,
+                moderator_config=moderator_config,
+                review_agents=review_agents_map,
+                rounds=settings.council_rounds,
+                api_keys=api_keys
+            )
+            conversation.status = "completed"
+            conversation.completed_at = datetime.now(UTC)
+        except Exception as e:
+            conversation.status = "failed"
+            conversation.meta_info = {"error": str(e)}
+            conversation.completed_at = datetime.now(UTC)
+            self.session.add(conversation)
+            self.session.commit()
+            raise
+
+        self.session.add(conversation)
+        self.session.commit()
+
+        # Parse moderator summary and store issues
+        await self._store_moderator_issues(review, conversation.summary)
+
+    async def _store_moderator_issues(self, review: Review, summary_text: str | None):
+        """Parse moderator JSON summary and store issues for council review."""
+        if not summary_text:
+            logger.warning("Council summary missing - no issues stored")
+            return
+
+        try:
+            data = json.loads(summary_text)
+        except json.JSONDecodeError:
+            logger.error("Council summary is not valid JSON - no issues stored")
+            return
+
+        issues = data.get("issues", [])
+        if not isinstance(issues, list):
+            logger.error("Council summary issues is not a list - no issues stored")
+            return
+
+        # Remove any existing issues for this review before storing moderator issues
+        existing_issues = self.session.exec(select(Issue).where(Issue.review_id == review.id)).all()
+        for issue in existing_issues:
+            self.session.delete(issue)
+        self.session.commit()
+
+        for issue_data in issues:
+            description = (issue_data.get("description") or "").strip()
+            title = description.split(".")[0][:120] if description else "Zgłoszony problem"
+
+            issue = Issue(
+                review_id=review.id,
+                file_id=None,
+                severity=issue_data.get("severity", "info"),
+                category=issue_data.get("category", "style"),
+                title=title,
+                description=description,
+                file_name=None,
+                line_start=None,
+                line_end=None
+            )
+            self.session.add(issue)
+            self.session.commit()
+            self.session.refresh(issue)
+
+            suggested_code = issue_data.get("suggested_code")
+            if suggested_code:
+                suggestion = Suggestion(
+                    issue_id=issue.id,
+                    suggested_code=suggested_code,
+                    explanation="Suggested fix from moderator"
+                )
+                self.session.add(suggestion)
+                self.session.commit()
 
     def _build_user_prompt(self, project: Project) -> str:
         """Build user prompt with project code.

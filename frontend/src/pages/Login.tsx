@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -24,11 +24,12 @@ export function Login() {
       await login({ email, password });
       toast.success('Zalogowano pomyślnie!');
       navigate('/projects');
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle validation errors (400) and authentication errors (401)
-      if (error.response?.status === 401) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 401) {
         toast.error('Nieprawidłowy email lub hasło');
-      } else if (error.response?.status === 422) {
+      } else if (status === 422) {
         // Pydantic validation error (e.g., invalid email format)
         toast.error(parseApiError(error, 'Nieprawidłowe dane logowania'));
       } else {

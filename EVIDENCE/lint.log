@@ -1,0 +1,8 @@
+
+> ai-code-review-arena@1.0.0 lint
+> cd frontend && npm run lint
+
+
+> code-review-arena-frontend@1.0.0 lint
+> eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0
+

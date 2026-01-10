@@ -1,4 +1,6 @@
 """Provider router for selecting and routing to LLM providers."""
+import logging
+import time
 from app.providers.base import LLMProvider, LLMMessage
 from app.providers.mock import MockProvider
 from app.providers.ollama import OllamaProvider
@@ -10,6 +12,8 @@ from app.providers.cloudflare import CloudflareProvider
 from app.providers.custom import CustomProvider
 from app.config import settings
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class CustomProviderConfig(BaseModel):
@@ -25,6 +29,23 @@ class CustomProviderConfig(BaseModel):
 class ProviderRouter:
     """Routes LLM requests to the appropriate provider with fallback logic."""
 
+    # Refusal patterns to detect when LLM refuses to respond
+    REFUSAL_PATTERNS = [
+        "przykro mi",
+        "nie mogę",
+        "nie jestem w stanie",
+        "przepraszam",
+        "sorry",
+        "i cannot",
+        "i can't",
+        "i'm sorry",
+        "i apologize",
+        "as an ai",
+        "i don't feel comfortable",
+        "against my guidelines",
+        "against my programming",
+    ]
+
     def __init__(self):
         """Initialize provider router with all available providers."""
         self.providers: dict[str, LLMProvider] = {
@@ -36,6 +57,52 @@ class ProviderRouter:
             "gemini": GeminiProvider(),
             "cloudflare": CloudflareProvider(),
         }
+
+    def _is_refusal(self, text: str) -> bool:
+        """Check if response contains refusal patterns.
+
+        Args:
+            text: Response text to check
+
+        Returns:
+            True if response appears to be a refusal
+        """
+        if not text or not text.strip():
+            return True
+        text_lower = text.lower()[:200]  # Check first 200 chars
+        for pattern in self.REFUSAL_PATTERNS:
+            if pattern in text_lower:
+                return True
+        return False
+
+    def _sanitize_messages(self, messages: list[LLMMessage]) -> list[LLMMessage]:
+        """Sanitize messages to avoid refusal triggers."""
+        sanitized: list[LLMMessage] = []
+        for msg in messages:
+            content = msg.content
+            content = content.replace("Combat", "Arena mode").replace("combat", "arena mode")
+            sanitized.append(LLMMessage(role=msg.role, content=content))
+        return sanitized
+
+    def _truncate_messages(self, messages: list[LLMMessage]) -> list[LLMMessage]:
+        """Truncate long messages to keep total prompt size bounded."""
+        max_chars = settings.max_prompt_chars
+        total_chars = sum(len(m.content) for m in messages)
+        if total_chars <= max_chars:
+            return messages
+
+        trimmed: list[LLMMessage] = []
+        remaining = max_chars
+        # Keep system messages intact, trim user/assistant content if needed
+        for msg in messages:
+            if remaining <= 0:
+                break
+            content = msg.content
+            if len(content) > remaining:
+                content = content[:remaining] + "\n... [trimmed]"
+            trimmed.append(LLMMessage(role=msg.role, content=content))
+            remaining -= len(content)
+        return trimmed
 
     def get_provider(self, provider_name: str | None = None) -> LLMProvider:
         """Get a provider by name with fallback logic.
@@ -132,7 +199,7 @@ class ProviderRouter:
         api_key: str | None = None,
         custom_provider_config: CustomProviderConfig | None = None
     ) -> tuple[str, str, str]:
-        """Generate text using the selected provider.
+        """Generate text using the selected provider with fallback on refusal.
 
         Args:
             messages: List of conversation messages
@@ -146,6 +213,11 @@ class ProviderRouter:
         Returns:
             Tuple of (generated_text, provider_name, model_name)
         """
+        # Calculate prompt stats for logging
+        total_prompt_chars = sum(len(m.content) for m in messages)
+        system_prompts = [m for m in messages if m.role == "system"]
+        user_prompts = [m for m in messages if m.role == "user"]
+
         # Use custom provider if config provided
         if custom_provider_config:
             provider = self.get_custom_provider(custom_provider_config)
@@ -159,15 +231,117 @@ class ProviderRouter:
         if model is None:
             model = settings.default_model
 
-        # Generate text
-        text = await provider.generate(
-            messages=messages,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens
+        # Try primary provider
+        logger.info(
+            f"🤖 LLM CALL START | Provider: {provider.name} | Model: {model} | "
+            f"Temp: {temperature} | Max tokens: {max_tokens} | "
+            f"Prompt chars: {total_prompt_chars} | "
+            f"System msgs: {len(system_prompts)} | User msgs: {len(user_prompts)}"
         )
 
-        return text, provider.name, model
+        start_time = time.time()
+
+        try:
+            # Generate text
+            text = await provider.generate(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            elapsed = time.time() - start_time
+
+            # Check if response is a refusal
+            is_refusal = self._is_refusal(text)
+
+            if is_refusal:
+                logger.warning(
+                    f"⚠️  LLM REFUSAL DETECTED | Provider: {provider.name} | Model: {model} | "
+                    f"Time: {elapsed:.2f}s | Response preview: {text[:150]}..."
+                )
+
+                # Retry once with sanitized + truncated prompt
+                retry_messages = self._truncate_messages(self._sanitize_messages(messages))
+                try:
+                    logger.info(
+                        f"🔁 RETRY with sanitized prompt | Provider: {provider.name} | Model: {model}"
+                    )
+                    retry_text = await provider.generate(
+                        messages=retry_messages,
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    )
+                    if not self._is_refusal(retry_text):
+                        logger.info(
+                            f"✅ LLM CALL SUCCESS (retry) | Provider: {provider.name} | "
+                            f"Model: {model} | Time: {time.time() - start_time:.2f}s | "
+                            f"Response length: {len(retry_text)} chars"
+                        )
+                        return retry_text, provider.name, model
+                except Exception as e:
+                    logger.error(f"❌ Retry failed on provider {provider.name}: {str(e)[:200]}")
+
+                # Try fallback providers
+                fallback_providers = ["ollama", "mock"]
+                for fallback_name in fallback_providers:
+                    if fallback_name == provider.name.lower():
+                        continue  # Skip if already tried
+
+                    fallback_provider = self.providers.get(fallback_name)
+                    if not fallback_provider or not fallback_provider.is_available():
+                        continue
+
+                    logger.info(
+                        f"🔄 RETRY with fallback | Provider: {fallback_provider.name} | Model: {model}"
+                    )
+
+                    try:
+                        fallback_text = await fallback_provider.generate(
+                            messages=retry_messages,
+                            model=model,
+                            temperature=temperature,
+                            max_tokens=max_tokens
+                        )
+
+                        fallback_elapsed = time.time() - start_time
+
+                        if not self._is_refusal(fallback_text):
+                            logger.info(
+                                f"✅ LLM CALL SUCCESS (fallback) | Provider: {fallback_provider.name} | "
+                                f"Model: {model} | Time: {fallback_elapsed:.2f}s | "
+                                f"Response length: {len(fallback_text)} chars"
+                            )
+                            return fallback_text, fallback_provider.name, model
+
+                    except Exception as e:
+                        logger.error(f"❌ Fallback provider {fallback_name} failed: {str(e)[:200]}")
+                        continue
+
+                # All fallbacks failed or also refused - return original refusal
+                logger.error(
+                    f"❌ ALL PROVIDERS REFUSED | Original: {provider.name} | "
+                    f"Returning refusal response"
+                )
+                return text, provider.name, model
+
+            else:
+                # Success - no refusal
+                logger.info(
+                    f"✅ LLM CALL SUCCESS | Provider: {provider.name} | Model: {model} | "
+                    f"Time: {elapsed:.2f}s | Response length: {len(text)} chars | "
+                    f"Preview: {text[:100]}..."
+                )
+                return text, provider.name, model
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(
+                f"❌ LLM CALL FAILED | Provider: {provider.name} | Model: {model} | "
+                f"Time: {elapsed:.2f}s | Error: {str(e)[:200]}"
+            )
+            raise
 
     def is_provider_available(self, provider_name: str) -> bool:
         """Check if a provider is available.

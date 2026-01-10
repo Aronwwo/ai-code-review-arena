@@ -20,12 +20,20 @@ def validate_code_content(content: str, filename: str) -> dict:
     stripped = content.strip()
     if not stripped:
         result["valid"] = False
-        result["errors"].append("File content cannot be empty")
+        result["errors"].append("Plik jest puste - zawartość nie może być pusta")
+        return result
+
+    # Check for whitespace-only content
+    if content and not stripped:
+        result["valid"] = False
+        result["errors"].append("Plik jest puste - zawiera tylko białe znaki")
         return result
 
     # Check minimum length
     if len(stripped) < 10:
-        result["warnings"].append("File content is very short - review may be limited")
+        result["valid"] = False
+        result["errors"].append("Zawartość pliku jest zbyt krótka (minimum 10 znaków)")
+        return result
 
     # Check for common code indicators
     code_indicators = [
@@ -52,9 +60,12 @@ def validate_code_content(content: str, filename: str) -> dict:
 
     # Check for binary/garbage characters
     non_printable = sum(1 for c in content if ord(c) < 32 and c not in '\n\r\t')
-    if non_printable > len(content) * 0.1:
-        result["valid"] = False
-        result["errors"].append("File contains too many non-printable characters - may be binary file")
+    if non_printable > 0:
+        if non_printable > len(content) * 0.1:
+            result["valid"] = False
+            result["errors"].append("File contains too many non-printable characters - may be binary file")
+        else:
+            result["warnings"].append("File contains non-printable characters")
 
     return result
 
@@ -110,8 +121,8 @@ async def create_file(
     session.refresh(file)
 
     # Update project timestamp
-    from datetime import datetime
-    project.updated_at = datetime.utcnow()
+    from datetime import datetime, UTC
+    project.updated_at = datetime.now(UTC)
     session.add(project)
     session.commit()
 
@@ -199,9 +210,9 @@ async def update_file(
         if field != "content":
             setattr(file, field, value)
 
-    from datetime import datetime
-    file.updated_at = datetime.utcnow()
-    project.updated_at = datetime.utcnow()
+    from datetime import datetime, UTC
+    file.updated_at = datetime.now(UTC)
+    project.updated_at = datetime.now(UTC)
 
     session.add(file)
     session.add(project)
@@ -289,8 +300,8 @@ async def delete_file(
     session.delete(file)
 
     # Update project timestamp
-    from datetime import datetime
-    project.updated_at = datetime.utcnow()
+    from datetime import datetime, UTC
+    project.updated_at = datetime.now(UTC)
     session.add(project)
 
     session.commit()

@@ -1,5 +1,5 @@
 """Audit log API endpoints."""
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select, func
 from app.database import get_session

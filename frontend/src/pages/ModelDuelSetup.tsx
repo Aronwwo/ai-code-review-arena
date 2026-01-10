@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Sword, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
 
 const PROVIDERS = ['groq', 'gemini', 'openai', 'anthropic', 'ollama'];
 const ROLES = ['general', 'security', 'performance', 'style'];
@@ -67,8 +68,8 @@ export function ModelDuelSetup() {
       toast.success('Model Duel rozpoczęty!');
       navigate(`/model-duel/${data.id}`);
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się rozpocząć Model Duel');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się rozpocząć Model Duel'));
     },
   });
 

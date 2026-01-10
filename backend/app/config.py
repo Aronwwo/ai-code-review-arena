@@ -59,19 +59,17 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60  # Token wygasa po 1h
 
     # ==================== CORS ====================
-    # Lista dozwolonych domen dla cross-origin requests
+    # Lista dozwolonych domen dla cross-origin requests (comma-separated)
     cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
     # Production: "https://yourdomain.com,https://www.yourdomain.com"
 
-    @field_validator("cors_origins")
-    @classmethod
-    def parse_cors_origins(cls, v: str) -> list[str]:
+    def get_cors_origins(self) -> list[str]:
         """Parse comma-separated CORS origins.
 
         Input: "http://localhost:3000,http://localhost:5173"
         Output: ["http://localhost:3000", "http://localhost:5173"]
         """
-        return [origin.strip() for origin in v.split(",")]
+        return [origin.strip() for origin in self.cors_origins.split(",")]
 
     # ==================== RATE LIMITING ====================
     rate_limit_enabled: bool = True  # Włącz rate limiting (60 req/min)
@@ -95,8 +93,10 @@ class Settings(BaseSettings):
 
     # ==================== AGENT CONFIGURATION ====================
     max_conversation_turns: int = 5  # Maksymalnie 5 rund dyskusji w Council mode
+    council_rounds: int = 2  # Liczba rund dyskusji w Council mode
     enable_agent_caching: bool = True  # Cache odpowiedzi agentów (oszczędność kosztów)
     cache_ttl_hours: int = 24  # Cache ważny przez 24h
+    max_prompt_chars: int = 12000  # Maksymalna długość promptu przed przycięciem
 
     # ==================== LOGGING ====================
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL

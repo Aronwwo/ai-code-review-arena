@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from '@/components/ui/Toaster';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/useAuth';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -20,6 +21,8 @@ const Settings = lazy(() => import('@/pages/Settings').then(m => ({ default: m.S
 const ModelDuelSetup = lazy(() => import('@/pages/ModelDuelSetup').then(m => ({ default: m.ModelDuelSetup })));
 const ModelDuelCompare = lazy(() => import('@/pages/ModelDuelCompare').then(m => ({ default: m.ModelDuelCompare })));
 const Rankings = lazy(() => import('@/pages/Rankings').then(m => ({ default: m.Rankings })));
+const ArenaDetail = lazy(() => import('@/pages/ArenaDetail').then(m => ({ default: m.ArenaDetail })));
+const ArenaRankings = lazy(() => import('@/pages/ArenaRankings').then(m => ({ default: m.ArenaRankings })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +85,8 @@ function AppRoutes() {
           <Route path="model-duel/setup" element={<ModelDuelSetup />} />
           <Route path="model-duel/:sessionId" element={<ModelDuelCompare />} />
           <Route path="rankings" element={<Rankings />} />
+          <Route path="arena/sessions/:id" element={<ArenaDetail />} />
+          <Route path="arena/rankings" element={<ArenaRankings />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

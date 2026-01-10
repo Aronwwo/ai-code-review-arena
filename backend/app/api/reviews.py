@@ -23,7 +23,8 @@ async def run_review_in_background(
     provider: str | None,
     model: str | None,
     api_keys: dict[str, str] | None = None,
-    agent_configs: dict | None = None
+    agent_configs: dict | None = None,
+    moderator_config: dict | None = None
 ):
     """Run review in background task."""
     from app.database import Session, engine
@@ -39,9 +40,23 @@ async def run_review_in_background(
             else:
                 parsed_agent_configs[role] = config
 
+    parsed_moderator_config = None
+    if moderator_config:
+        if isinstance(moderator_config, dict):
+            parsed_moderator_config = AgentConfig(**moderator_config)
+        else:
+            parsed_moderator_config = moderator_config
+
     with Session(engine) as session:
         orchestrator = ReviewOrchestrator(session)
-        await orchestrator.conduct_review(review_id, provider, model, api_keys, parsed_agent_configs)
+        await orchestrator.conduct_review(
+            review_id,
+            provider,
+            model,
+            api_keys,
+            parsed_agent_configs,
+            parsed_moderator_config
+        )
 
 
 @projects_router.post("", response_model=ReviewRead, status_code=status.HTTP_201_CREATED)
@@ -52,14 +67,75 @@ async def create_review(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session)
 ):
-    """Create and start a new review for a project."""
+    """Utwórz i uruchom nowy review dla projektu.
+
+    Wspiera dwa tryby:
+    1. COUNCIL MODE (domyślny): Agenci współpracują nad jednym review
+       - Podaj agent_roles i opcjonalnie agent_configs
+    2. COMBAT ARENA: Porównanie dwóch pełnych schematów (A vs B)
+       - Nie używaj tego endpoint! Użyj POST /arena/sessions zamiast tego
+
+    Args:
+        project_id: ID projektu do przeanalizowania
+        review_data: Konfiguracja review (tryb, role, konfiguracje agentów)
+        background_tasks: FastAPI BackgroundTasks
+        current_user: Zalogowany użytkownik
+        session: Sesja bazodanowa
+
+    Returns:
+        Utworzony Review (status: "pending")
+
+    Raises:
+        HTTPException 400: Jeśli tryb Arena użyty bezpośrednio
+        HTTPException 404: Jeśli projekt nie istnieje
+    """
     project = await verify_project_access(project_id, current_user, session)
 
-    # Create review
+    # === WALIDACJA TRYBU ===
+    # Arena review MUSZĄ być tworzone przez POST /arena/sessions, nie bezpośrednio
+    review_mode = review_data.review_mode
+
+    if review_mode == "combat_arena":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "Combat Arena nie może być utworzone bezpośrednio przez ten endpoint",
+                "hint": "Użyj POST /arena/sessions aby utworzyć sesję Arena",
+                "provided_mode": review_mode
+            }
+        )
+    if review_mode != "council":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "Nieprawidłowy tryb review",
+                "allowed": ["council"],
+                "provided_mode": review_mode
+            }
+        )
+
+    # === TWORZENIE COUNCIL REVIEW ===
+    moderator_type = review_data.moderator_type
+
+    if not review_data.agent_configs:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="agent_configs jest wymagane dla trybu council"
+        )
+
+    if not review_data.moderator_config:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="moderator_config jest wymagane dla trybu council"
+        )
+    # Prompts are fixed server-side; ignore any client-provided prompts.
+
     review = Review(
         project_id=project_id,
         created_by=current_user.id,
-        status="pending"
+        status="pending",
+        review_mode=review_mode,  # "council"
+        moderator_type=moderator_type  # "debate", "consensus", or "strategic"
     )
     session.add(review)
     session.commit()
@@ -73,8 +149,10 @@ async def create_review(
             provider = config.provider
             model = config.model
         else:
-            provider = review_data.provider or "mock"
-            model = review_data.model or "default"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Brak konfiguracji dla roli '{role}' w agent_configs"
+            )
 
         agent = ReviewAgent(
             review_id=review.id,
@@ -88,11 +166,14 @@ async def create_review(
     session.commit()
 
     # Start review in background with agent configs
-    agent_configs_dict = None
-    if review_data.agent_configs:
-        agent_configs_dict = {
-            role: config.model_dump() for role, config in review_data.agent_configs.items()
-        }
+    agent_configs_dict = {
+        role: {k: v for k, v in config.model_dump().items() if k != "prompt"}
+        for role, config in review_data.agent_configs.items()
+    }
+
+    moderator_config_dict = {
+        k: v for k, v in review_data.moderator_config.model_dump().items() if k != "prompt"
+    }
 
     background_tasks.add_task(
         run_review_in_background,
@@ -100,7 +181,8 @@ async def create_review(
         review_data.provider,
         review_data.model,
         review_data.api_keys,
-        agent_configs_dict
+        agent_configs_dict,
+        moderator_config_dict
     )
 
     return ReviewRead(
@@ -268,7 +350,7 @@ async def get_review_issues(
     items = []
     for issue in issues:
         # Suggestions are already loaded, no additional query needed
-        suggestion_reads = [SuggestionRead(**s.model_dump()) for s in issue.suggestions]
+        suggestion_reads = [SuggestionRead(**s.model_dump()) for s in (issue.suggestions or [])]
 
         items.append(IssueReadWithSuggestions(
             **issue.model_dump(),
@@ -323,8 +405,8 @@ async def update_issue(
     for field, value in update_data.items():
         setattr(issue, field, value)
 
-    from datetime import datetime
-    issue.updated_at = datetime.utcnow()
+    from datetime import datetime, UTC
+    issue.updated_at = datetime.now(UTC)
 
     session.add(issue)
     session.commit()

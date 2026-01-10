@@ -9,6 +9,7 @@ import {
   CheckCircle, XCircle, Gavel
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
 
 interface Message {
   id: number;
@@ -18,7 +19,7 @@ interface Message {
   turn_index: number;
   content: string;
   is_summary: boolean;
-  meta_info?: any;
+  meta_info?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -109,8 +110,8 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
       setActiveConversation(data.id);
       toast.success('Rozpoczęto dyskusję agentów');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Nie udało się rozpocząć dyskusji');
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się rozpocząć dyskusji'));
     },
   });
 
