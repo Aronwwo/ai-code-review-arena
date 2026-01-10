@@ -158,7 +158,7 @@ class AgentConfig(SQLModel):
 
     provider: str
     model: str
-    prompt: str
+    prompt: str | None = None
     temperature: float = 0.2
     max_tokens: int = 2048
     # For custom providers

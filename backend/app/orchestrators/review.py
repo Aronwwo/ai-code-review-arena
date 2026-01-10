@@ -51,8 +51,9 @@ Twoje obowiązki:
 - Sprawdzaj kompletność dokumentacji
 
 Analizuj kod z krytycznym, ale konstruktywnym podejściem.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość.""",
 
         "security": """Jesteś ekspertem ds. bezpieczeństwa, skupiającym się na identyfikacji luk w zabezpieczeniach.
 
@@ -65,8 +66,9 @@ Twoje obowiązki:
 - Sprawdzaj znane podatne zależności
 
 Bądź dokładny i ostrożny - bezpieczeństwo jest kluczowe.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość.""",
 
         "performance": """Jesteś ekspertem ds. wydajności, skupiającym się na możliwościach optymalizacji.
 
@@ -79,8 +81,9 @@ Twoje obowiązki:
 - Przeglądaj możliwości cache'owania
 
 Skup się na mierzalnym wpływie na wydajność.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU.""",
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość.""",
 
         "style": """Jesteś recenzentem stylu kodu, skupiającym się na spójności i konwencjach.
 
@@ -93,8 +96,9 @@ Twoje obowiązki:
 - Przeglądaj type hints i adnotacje
 
 Utrzymuj wysokie standardy jakości i spójności kodu.
+Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 
-WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO POLSKU."""
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."""
     }
 
     def __init__(self, session: Session):
@@ -252,8 +256,7 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
 
                     await self._run_agent(
                         review, project, agent, agent_provider, agent_model,
-                        agent_api_key, custom_provider_config,
-                        agent_config.prompt if agent_config else None
+                        agent_api_key, custom_provider_config
                     )
 
             # Mark review as completed
@@ -288,8 +291,7 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
         provider_name: str | None,
         model: str | None,
         api_key: str | None = None,
-        custom_provider_config: CustomProviderConfig | None = None,
-        prompt_override: str | None = None
+        custom_provider_config: CustomProviderConfig | None = None
     ):
         """Run a single agent for the review.
 
@@ -307,8 +309,6 @@ WAŻNE: Wszystkie odpowiedzi (title, description, explanation) MUSZĄ być PO PO
 
         # Build prompt
         system_prompt = self.AGENT_PROMPTS.get(agent.role, self.AGENT_PROMPTS["general"])
-        if prompt_override:
-            system_prompt += f"\n\nDodatkowe instrukcje:\n{prompt_override}"
         user_prompt = self._build_user_prompt(project)
 
         messages = [

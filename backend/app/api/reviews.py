@@ -128,18 +128,7 @@ async def create_review(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="moderator_config jest wymagane dla trybu council"
         )
-    if not review_data.moderator_config.prompt.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="moderator_config.prompt nie może być pusty"
-        )
-
-    for role, config in review_data.agent_configs.items():
-        if not config.prompt.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"agent_configs[{role}].prompt nie może być pusty"
-            )
+    # Prompts are fixed server-side; ignore any client-provided prompts.
 
     review = Review(
         project_id=project_id,
@@ -178,10 +167,13 @@ async def create_review(
 
     # Start review in background with agent configs
     agent_configs_dict = {
-        role: config.model_dump() for role, config in review_data.agent_configs.items()
+        role: {k: v for k, v in config.model_dump().items() if k != "prompt"}
+        for role, config in review_data.agent_configs.items()
     }
 
-    moderator_config_dict = review_data.moderator_config.model_dump()
+    moderator_config_dict = {
+        k: v for k, v in review_data.moderator_config.model_dump().items() if k != "prompt"
+    }
 
     background_tasks.add_task(
         run_review_in_background,

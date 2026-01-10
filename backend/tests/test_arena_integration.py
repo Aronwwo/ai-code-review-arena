@@ -40,16 +40,16 @@ class TestArenaSessionCreation:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 }
             },
             headers=auth_headers
@@ -79,15 +79,15 @@ class TestArenaSessionCreation:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
                     # Missing: performance, style
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 }
             },
             headers=auth_headers
@@ -114,13 +114,13 @@ class TestArenaSessionCreation:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"}
                     # Missing: security, performance, style
                 }
             },
@@ -138,16 +138,16 @@ class TestArenaSessionCreation:
             json={
                 "project_id": 99999,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 }
             },
             headers=auth_headers
@@ -186,16 +186,16 @@ class TestArenaVoting:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 }
             },
             headers=auth_headers
@@ -290,16 +290,16 @@ class TestArenaSessionRetrieval:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 }
             },
             headers=auth_headers
@@ -351,16 +351,16 @@ class TestArenaSessionRetrieval:
             json={
                 "project_id": project_id,
                 "schema_a_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 },
                 "schema_b_config": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "security": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "performance": {"provider": "mock", "model": "default", "prompt": "Test prompt"},
-                    "style": {"provider": "mock", "model": "default", "prompt": "Test prompt"}
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "default"},
+                    "performance": {"provider": "mock", "model": "default"},
+                    "style": {"provider": "mock", "model": "default"}
                 }
             },
             headers=auth_headers

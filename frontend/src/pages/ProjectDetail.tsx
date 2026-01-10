@@ -216,7 +216,6 @@ export function ProjectDetail() {
         agentConfigs[role] = {
           provider: agent.provider,
           model: agent.model,
-          prompt: agent.prompt,
           temperature: 0.2,
           max_tokens: 2048,
           custom_provider: customProvider,
@@ -229,7 +228,6 @@ export function ProjectDetail() {
     const moderatorConfig = {
       provider: config.moderator.provider,
       model: config.moderator.model,
-      prompt: config.moderator.prompt,
       temperature: 0.0,
       max_tokens: 1024,
       custom_provider: moderatorCustomProvider,

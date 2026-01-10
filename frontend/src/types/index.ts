@@ -88,7 +88,6 @@ export interface Review {
 export interface AgentConfig {
   provider: string;
   model: string;
-  prompt: string;
   temperature?: number;
   max_tokens?: number;
   custom_provider?: {

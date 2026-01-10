@@ -29,16 +29,16 @@ def test_stats_and_rankings_cache_invalidated_on_vote(client: TestClient, auth_h
         created_by=user.id,
         status="completed",
         schema_a_config={
-            "general": {"provider": "mock", "model": "default", "prompt": "A general"},
-            "security": {"provider": "mock", "model": "default", "prompt": "A security"},
-            "performance": {"provider": "mock", "model": "default", "prompt": "A performance"},
-            "style": {"provider": "mock", "model": "default", "prompt": "A style"},
+            "general": {"provider": "mock", "model": "default"},
+            "security": {"provider": "mock", "model": "default"},
+            "performance": {"provider": "mock", "model": "default"},
+            "style": {"provider": "mock", "model": "default"},
         },
         schema_b_config={
-            "general": {"provider": "mock", "model": "default", "prompt": "B general"},
-            "security": {"provider": "mock", "model": "default", "prompt": "B security"},
-            "performance": {"provider": "mock", "model": "default", "prompt": "B performance"},
-            "style": {"provider": "mock", "model": "default", "prompt": "B style"},
+            "general": {"provider": "mock", "model": "default"},
+            "security": {"provider": "mock", "model": "default"},
+            "performance": {"provider": "mock", "model": "default"},
+            "style": {"provider": "mock", "model": "default"},
         },
     )
     test_session.add(arena_session)

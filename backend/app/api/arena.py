@@ -108,27 +108,22 @@ async def create_arena_session(
             }
         )
 
-    # Waliduj strukturę każdej konfiguracji roli (musi mieć provider, model i prompt)
+    # Waliduj strukturę każdej konfiguracji roli (musi mieć provider i model)
     for schema_name, schema_config in [("A", arena_data.schema_a_config), ("B", arena_data.schema_b_config)]:
         for role, config in schema_config.items():
-            if "provider" not in config or "model" not in config or "prompt" not in config:
+            if "provider" not in config or "model" not in config:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Schema {schema_name}, rola '{role}': brakuje 'provider', 'model' lub 'prompt'"
-                )
-            if not str(config.get("prompt", "")).strip():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Schema {schema_name}, rola '{role}': prompt nie może być pusty"
+                    detail=f"Schema {schema_name}, rola '{role}': brakuje 'provider' lub 'model'"
                 )
 
     # Konwertuj AgentConfig do dict dla zapisu w JSON column
     schema_a_dict = {
-        role: config.model_dump() if hasattr(config, "model_dump") else config
+        role: {k: v for k, v in (config.model_dump() if hasattr(config, "model_dump") else config).items() if k != "prompt"}
         for role, config in arena_data.schema_a_config.items()
     }
     schema_b_dict = {
-        role: config.model_dump() if hasattr(config, "model_dump") else config
+        role: {k: v for k, v in (config.model_dump() if hasattr(config, "model_dump") else config).items() if k != "prompt"}
         for role, config in arena_data.schema_b_config.items()
     }
 

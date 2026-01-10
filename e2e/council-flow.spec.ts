@@ -37,13 +37,6 @@ const configureVisibleSelectsToMock = async (dialog: Locator) => {
   }
 };
 
-const fillVisibleTextareas = async (dialog: Locator, prefix: string) => {
-  const textareas = dialog.locator('textarea:visible');
-  const count = await textareas.count();
-  for (let i = 0; i < count; i += 1) {
-    await textareas.nth(i).fill(`${prefix} ${i + 1}`);
-  }
-};
 
 test('council flow: login -> project -> upload -> review -> tabs', async ({ page }) => {
   const suffix = Date.now().toString();
@@ -60,13 +53,11 @@ test('council flow: login -> project -> upload -> review -> tabs', async ({ page
   await dialog.getByText('Tryb Rady (Council)').click();
   await dialog.getByRole('tab', { name: /Agenci/ }).click();
   await configureVisibleSelectsToMock(dialog);
-  await fillVisibleTextareas(dialog, 'Agent prompt');
 
   await dialog.getByRole('tab', { name: /Moderator/ }).click();
   const moderatorSelects = dialog.locator('select:visible');
   await moderatorSelects.nth(1).selectOption('mock');
   await moderatorSelects.nth(2).selectOption('mock-model');
-  await dialog.locator('textarea:visible').fill('Moderator prompt');
 
   await startButton.click();
   await expect(page).toHaveURL(/\/reviews\/\d+/);

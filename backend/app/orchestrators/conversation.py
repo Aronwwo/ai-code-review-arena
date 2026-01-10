@@ -52,22 +52,22 @@ class ConversationOrchestrator:
         {
             "id": "general",
             "name": "Recenzent Ogólny",
-            "prompt": "Skup się na ogólnej jakości kodu, błędach logicznych i najlepszych praktykach."
+            "prompt": "Skup się na ogólnej jakości kodu, błędach logicznych i najlepszych praktykach. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
         {
             "id": "security",
             "name": "Ekspert Bezpieczeństwa",
-            "prompt": "Skup się na podatnościach (SQLi/XSS), auth/authz, ekspozycji danych i konfiguracjach."
+            "prompt": "Skup się na podatnościach (SQLi/XSS), auth/authz, ekspozycji danych i konfiguracjach. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
         {
             "id": "performance",
             "name": "Analityk Wydajności",
-            "prompt": "Skup się na wydajności, złożoności, N+1, pamięci i możliwościach cache."
+            "prompt": "Skup się na wydajności, złożoności, N+1, pamięci i możliwościach cache. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
         {
             "id": "style",
             "name": "Specjalista Jakości Kodu",
-            "prompt": "Skup się na spójności, czytelności, konwencjach i code smellach."
+            "prompt": "Skup się na spójności, czytelności, konwencjach i code smellach. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
     ]
 
@@ -81,7 +81,7 @@ Bądź dokładny i przekonujący:
 
 Pozostań jednak profesjonalny i oparty na faktach. Twoim celem jest prawda, a nie zwycięstwo za wszelką cenę.
 
-WAŻNE: Odpowiadaj TYLKO po polsku. Bądź zwięzły - maksymalnie 4-5 zdań."""
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Bądź zwięzły - maksymalnie 4-5 zdań. Dbaj o szybkie odpowiedzi i ograniczaj długość."""
 
     DEFENDER_PROMPT = """Jesteś Obrońcą w debacie o przeglądzie kodu. Twoją rolą jest dostarczanie kontekstu i argumentowanie za rozsądną interpretacją problemów.
 
@@ -94,7 +94,7 @@ Rozważ czynniki łagodzące:
 
 Bądź wyważony - uznawaj prawdziwe problemy, ale dostarczaj ważny kontekst, który Prokurator może pominąć.
 
-WAŻNE: Odpowiadaj TYLKO po polsku. Bądź zwięzły - maksymalnie 4-5 zdań."""
+WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Bądź zwięzły - maksymalnie 4-5 zdań. Dbaj o szybkie odpowiedzi i ograniczaj długość."""
 
     MODERATOR_ARENA_PROMPT = """Jesteś Moderatorem w debacie o przeglądzie kodu. Wysłuchałeś argumentów zarówno Prokuratora, jak i Obrońcy.
 
@@ -108,7 +108,7 @@ Wydaj sprawiedliwy, wyważony werdykt w formacie JSON:
 
 Bądź obiektywny. Rozważ oba argumenty uważnie. Opieraj swoją decyzję na faktach, a nie na retoryce.
 
-WAŻNE: Pole "moderator_comment" musi być po polsku. Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
+WAŻNE: Pole "moderator_comment" powinno być po polsku (jeśli nie możesz, użyj angielskiego). Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu. Dbaj o zwięzłość i szybkie odpowiedzi."""
 
     MODERATOR_COUNCIL_PROMPT = """Jesteś Moderatorem syntetyzującym dyskusję rady. Agenci przedyskutowali kod z różnych perspektyw.
 
@@ -133,7 +133,7 @@ Zsyntetyzuj ich spostrzeżenia w ustrukturyzowane podsumowanie JSON:
 }
 
 Jeśli nie potrzeba doprecyzowań, zwróć pustą listę followups.
-WAŻNE: Wszystkie teksty muszą być PO POLSKU.
+WAŻNE: Wszystkie teksty powinny być po polsku; jeśli nie możesz, użyj angielskiego. Zadbaj o zwięzłość, brak powtórzeń i szybkie odpowiedzi.
 Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
 
     def __init__(self, session: Session):
@@ -208,7 +208,7 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
             conversation: Conversation object
             provider_name: Default LLM provider
             model: Default model
-            agent_configs: Optional per-agent configs (provider/model/prompt)
+            agent_configs: Optional per-agent configs (provider/model)
             moderator_config: Optional moderator config
             review_agents: Optional ReviewAgent map to update with outputs
             rounds: Optional number of council rounds
@@ -224,21 +224,17 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
                 base_prompt = role["prompt"]
 
                 agent_config = agent_configs.get(role_id) if agent_configs else None
-                custom_prompt = agent_config.prompt if agent_config else ""
 
                 history = self._get_conversation_history(conversation)
                 system_prompt = (
                     f"Jesteś {role_name} uczestniczącym w współpracującej dyskusji o przeglądzie kodu.\n\n"
                     f"Rola: {base_prompt}\n"
                 )
-                if custom_prompt:
-                    system_prompt += f"\nDodatkowe instrukcje:\n{custom_prompt}\n"
-
                 system_prompt += (
                     f"\nPoprzedni kontekst dyskusji:\n{history}\n\n"
                     "Przedstaw swoją perspektywę na kod. Rozwijaj to, co powiedzieli inni. "
                     "Bądź zwięzły, ale wnikliwy.\n\n"
-                    "WAŻNE: Odpowiadaj TYLKO po polsku. Maksymalnie 3-4 zdania."
+                    "WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Maksymalnie 3-4 zdania."
                 )
 
                 messages = [
@@ -336,14 +332,12 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
 
                 role_name = role_def["name"]
                 agent_config = agent_configs.get(role_id) if agent_configs else None
-                custom_prompt = agent_config.prompt if agent_config else ""
 
                 system_prompt = (
                     f"Jesteś {role_name} w dyskusji rady.\n"
                     "Odpowiedz krótko i rzeczowo na pytanie moderatora.\n"
+                    "Preferuj język polski; jeśli nie możesz, użyj angielskiego.\n"
                 )
-                if custom_prompt:
-                    system_prompt += f"\nDodatkowe instrukcje:\n{custom_prompt}\n"
 
                 messages = [
                     LLMMessage(role="system", content=system_prompt),
@@ -525,8 +519,6 @@ Lines: {issue.line_start}-{issue.line_end if issue.line_end else issue.line_star
         system_prompt = self.MODERATOR_COUNCIL_PROMPT
         if not allow_followups:
             system_prompt += "\n\nWAŻNE: Pole followups MUSI być pustą listą."
-        if moderator_config and moderator_config.prompt:
-            system_prompt += f"\n\nDodatkowe instrukcje moderatora:\n{moderator_config.prompt}"
 
         messages = [
             LLMMessage(role="system", content=system_prompt),

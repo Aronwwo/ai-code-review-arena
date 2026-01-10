@@ -21,7 +21,6 @@ import { Label } from '@/components/ui/Label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Shield, Zap, Paintbrush, Code, Swords, Loader2, AlertTriangle } from 'lucide-react';
-import { Textarea } from '@/components/ui/Textarea';
 import { toast } from 'sonner';
 import { getProviders, CustomProvider } from '@/lib/providers';
 import { parseApiError } from '@/lib/errorParser';
@@ -74,16 +73,16 @@ export function ArenaSetupDialog({
   // Domyślna konfiguracja - oba schematy z Ollama
   const [config, setConfig] = useState<ArenaConfig>({
     schema_a: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
     schema_b: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
   });
 
@@ -160,8 +159,8 @@ export function ArenaSetupDialog({
           toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: wybierz model dla ${role.name}`);
           return;
         }
-        if (!agent.prompt.trim()) {
-          toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: uzupełnij prompt dla ${role.name}`);
+        if (!agent.provider || !agent.model) {
+          toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: wybierz provider i model dla ${role.name}`);
           return;
         }
       }
@@ -278,15 +277,6 @@ export function ArenaSetupDialog({
                           </div>
                         </div>
 
-                        <div>
-                          <Label>Prompt</Label>
-                          <Textarea
-                            className="w-full mt-1.5 min-h-[90px]"
-                            value={agent.prompt}
-                            onChange={(e) => updateAgent(schema, role.id, { prompt: e.target.value })}
-                            placeholder="Instrukcje dla roli w schemacie"
-                          />
-                        </div>
                       </CardContent>
                     </Card>
                   );

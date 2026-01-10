@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Switch } from '@/components/ui/Switch';
-import { Textarea } from '@/components/ui/Textarea';
 import { Shield, Zap, Paintbrush, Code, Users, Swords, Loader2, AlertTriangle, Bot, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
@@ -18,14 +17,13 @@ interface AgentConfig {
   enabled: boolean;
   provider: string;
   model: string;
-  prompt: string;
 }
 
 interface ArenaSchemaConfig {
-  general: { provider: string; model: string; prompt: string };
-  security: { provider: string; model: string; prompt: string };
-  performance: { provider: string; model: string; prompt: string };
-  style: { provider: string; model: string; prompt: string };
+  general: { provider: string; model: string };
+  security: { provider: string; model: string };
+  performance: { provider: string; model: string };
+  style: { provider: string; model: string };
 }
 
 export interface ReviewConfig {
@@ -38,7 +36,6 @@ export interface ReviewConfig {
   moderator: {
     provider: string;
     model: string;
-    prompt: string;
     type: 'debate' | 'consensus' | 'strategic';
   };
   mode: 'council' | 'arena' | null;
@@ -87,24 +84,24 @@ export function ReviewConfigDialog({
 
   const [config, setConfig] = useState<ReviewConfig>({
     agents: {
-      general: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      security: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      performance: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      style: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      general: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { enabled: true, provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
-    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '', type: 'debate' },
+    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', type: 'debate' },
     mode: null,
     arena_schema_a: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
     arena_schema_b: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', prompt: '' },
+      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
     },
   });
 
@@ -217,7 +214,7 @@ export function ReviewConfigDialog({
     }));
   };
 
-  const updateModerator = (updates: Partial<{ provider: string; model: string; prompt: string; type: 'debate' | 'consensus' | 'strategic' }>) => {
+  const updateModerator = (updates: Partial<{ provider: string; model: string; type: 'debate' | 'consensus' | 'strategic' }>) => {
     setConfig(prev => ({
       ...prev,
       moderator: { ...prev.moderator, ...updates },
@@ -227,7 +224,7 @@ export function ReviewConfigDialog({
   const updateArenaSchema = (
     schema: 'a' | 'b',
     role: keyof ArenaSchemaConfig,
-    updates: Partial<{ provider: string; model: string; prompt: string }>
+    updates: Partial<{ provider: string; model: string }>
   ) => {
     const schemaKey = schema === 'a' ? 'arena_schema_a' : 'arena_schema_b';
     setConfig(prev => ({
@@ -253,14 +250,10 @@ export function ReviewConfigDialog({
         return;
       }
 
-      // Validate that all enabled agents have models and prompts selected
+      // Validate that all enabled agents have models selected
       for (const [id, agent] of Object.entries(config.agents)) {
         if (agent.enabled && !agent.model) {
           toast.error(`Wybierz model dla agenta ${id}`);
-          return;
-        }
-        if (agent.enabled && !agent.prompt.trim()) {
-          toast.error(`Uzupełnij prompt dla agenta ${id}`);
           return;
         }
       }
@@ -269,20 +262,12 @@ export function ReviewConfigDialog({
         toast.error('Wybierz model dla moderatora');
         return;
       }
-      if (!config.moderator.prompt.trim()) {
-        toast.error('Uzupełnij prompt dla moderatora');
-        return;
-      }
     } else {
       for (const schemaKey of ['arena_schema_a', 'arena_schema_b'] as const) {
         for (const [roleId, schemaConfig] of Object.entries(config[schemaKey])) {
           const roleLabel = `${schemaKey === 'arena_schema_a' ? 'Schema A' : 'Schema B'} / ${roleId}`;
           if (!schemaConfig.model) {
             toast.error(`Wybierz model dla ${roleLabel}`);
-            return;
-          }
-          if (!schemaConfig.prompt.trim()) {
-            toast.error(`Uzupełnij prompt dla ${roleLabel}`);
             return;
           }
         }
@@ -445,15 +430,6 @@ export function ReviewConfigDialog({
                           )}
                         </div>
 
-                        <div className="space-y-2">
-                          <Label className="text-xs">Prompt</Label>
-                          <Textarea
-                            value={agent.prompt}
-                            onChange={(e) => updateAgent(role.id, { prompt: e.target.value })}
-                            placeholder="Instrukcje dla agenta (np. na co ma zwrócić uwagę)"
-                            className="min-h-[90px]"
-                          />
-                        </div>
                       </CardContent>
                     )}
                   </Card>
@@ -534,15 +510,6 @@ export function ReviewConfigDialog({
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Prompt Moderatora</Label>
-                  <Textarea
-                    value={config.moderator.prompt}
-                    onChange={(e) => updateModerator({ prompt: e.target.value })}
-                    placeholder="Instrukcje dla moderatora (np. jak syntetyzować wnioski)"
-                    className="min-h-[90px]"
-                  />
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -676,15 +643,6 @@ export function ReviewConfigDialog({
                             )}
                           </div>
 
-                          <div className="space-y-2">
-                            <Label className="text-xs">Prompt</Label>
-                            <Textarea
-                              value={schemaConfig.prompt}
-                              onChange={(e) => updateArenaSchema('a', role.id as keyof ArenaSchemaConfig, { prompt: e.target.value })}
-                              placeholder="Instrukcje dla roli w Schemacie A"
-                              className="min-h-[90px]"
-                            />
-                          </div>
                         </div>
                       </Card>
                     );
@@ -768,15 +726,6 @@ export function ReviewConfigDialog({
                             )}
                           </div>
 
-                          <div className="space-y-2">
-                            <Label className="text-xs">Prompt</Label>
-                            <Textarea
-                              value={schemaConfig.prompt}
-                              onChange={(e) => updateArenaSchema('b', role.id as keyof ArenaSchemaConfig, { prompt: e.target.value })}
-                              placeholder="Instrukcje dla roli w Schemacie B"
-                              className="min-h-[90px]"
-                            />
-                          </div>
                         </div>
                       </Card>
                     );

@@ -8,14 +8,13 @@ def _agent_configs(roles):
         role: {
             "provider": "mock",
             "model": "default",
-            "prompt": f"{role} prompt",
         }
         for role in roles
     }
 
 
 def _moderator_config():
-    return {"provider": "mock", "model": "default", "prompt": "Moderator prompt"}
+    return {"provider": "mock", "model": "default"}
 
 
 def _create_project(client: TestClient, auth_headers: dict) -> int:
@@ -131,10 +130,10 @@ def hash_password(password):
                 "review_mode": "council",
                 "agent_roles": ["general", "security", "performance", "style"],
                 "agent_configs": {
-                    "general": {"provider": "mock", "model": "default", "prompt": "General"},
-                    "security": {"provider": "mock", "model": "security-model", "prompt": "Security"},
-                    "performance": {"provider": "mock", "model": "perf-model", "prompt": "Performance"},
-                    "style": {"provider": "mock", "model": "style-model", "prompt": "Style"},
+                    "general": {"provider": "mock", "model": "default"},
+                    "security": {"provider": "mock", "model": "security-model"},
+                    "performance": {"provider": "mock", "model": "perf-model"},
+                    "style": {"provider": "mock", "model": "style-model"},
                 },
                 "moderator_type": "consensus",
                 "moderator_config": _moderator_config(),

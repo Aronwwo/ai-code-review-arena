@@ -22,10 +22,10 @@ async def test_conduct_arena_uses_asyncio_gather(test_session: Session, monkeypa
     test_session.refresh(project)
 
     schema_config = {
-        "general": {"provider": "mock", "model": "mock-model", "prompt": "A"},
-        "security": {"provider": "mock", "model": "mock-model", "prompt": "B"},
-        "performance": {"provider": "mock", "model": "mock-model", "prompt": "C"},
-        "style": {"provider": "mock", "model": "mock-model", "prompt": "D"},
+        "general": {"provider": "mock", "model": "mock-model"},
+        "security": {"provider": "mock", "model": "mock-model"},
+        "performance": {"provider": "mock", "model": "mock-model"},
+        "style": {"provider": "mock", "model": "mock-model"},
     }
 
     arena_session = ArenaSession(

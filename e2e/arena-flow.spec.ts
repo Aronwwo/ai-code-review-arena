@@ -37,13 +37,6 @@ const configureVisibleSelectsToMock = async (dialog: Locator) => {
   }
 };
 
-const fillVisibleTextareas = async (dialog: Locator, prefix: string) => {
-  const textareas = dialog.locator('textarea:visible');
-  const count = await textareas.count();
-  for (let i = 0; i < count; i += 1) {
-    await textareas.nth(i).fill(`${prefix} ${i + 1}`);
-  }
-};
 
 test('arena flow: setup schemas -> vote -> rankings', async ({ page }) => {
   const suffix = Date.now().toString();
@@ -58,11 +51,9 @@ test('arena flow: setup schemas -> vote -> rankings', async ({ page }) => {
 
   await dialog.getByRole('tab', { name: /Schema A/ }).click();
   await configureVisibleSelectsToMock(dialog);
-  await fillVisibleTextareas(dialog, 'Schema A prompt');
 
   await dialog.getByRole('tab', { name: /Schema B/ }).click();
   await configureVisibleSelectsToMock(dialog);
-  await fillVisibleTextareas(dialog, 'Schema B prompt');
 
   await dialog.getByRole('button', { name: /Rozpocznij Arena/ }).click();
   await expect(page).toHaveURL(/\/arena\/sessions\/\d+/);
