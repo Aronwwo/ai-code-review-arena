@@ -362,7 +362,7 @@ export function ReviewConfigDialog({
                       <input
                         type="number"
                         min={30}
-                        max={600}
+                        max={3600}
                         className="w-20 p-2 border rounded-md text-sm bg-background"
                         value={agent.timeout}
                         onChange={(e) => updateTeamAgent(team, role.id, { timeout: parseInt(e.target.value) || 180 })}
