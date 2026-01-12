@@ -43,7 +43,7 @@ export function Settings() {
   } = useQuery<OllamaModel>({
     queryKey: ['ollama-models'],
     queryFn: async () => {
-      const response = await api.get('/ollama/models');
+      const response = await api.get('/api/ollama/models');
       return response.data;
     },
     retry: 1,

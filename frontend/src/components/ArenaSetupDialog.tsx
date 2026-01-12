@@ -98,7 +98,7 @@ export function ArenaSetupDialog({
     queryKey: ['ollama-models'],
     queryFn: async () => {
       try {
-        const response = await api.get('/ollama/models');
+        const response = await api.get('/api/ollama/models');
         return response.data;
       } catch {
         return { models: [], cached: false };

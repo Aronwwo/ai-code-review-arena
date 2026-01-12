@@ -7,7 +7,7 @@ from app.api.deps import get_current_user
 import httpx
 
 
-router = APIRouter(prefix="/ollama", tags=["ollama"])
+router = APIRouter(prefix="/api/ollama", tags=["ollama"])
 
 
 class ModelsResponse(BaseModel):
