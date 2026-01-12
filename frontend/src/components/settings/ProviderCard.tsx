@@ -123,23 +123,55 @@ export function ProviderCard({ provider, onEdit, onDelete, onUpdateApiKey }: Pro
         </div>
 
         {/* Models */}
-        {provider.models.length > 0 && (
+        {provider.id === 'ollama' ? (
+          // Ollama - models are fetched dynamically, shown in OllamaSection
+          provider.models.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Dostępne Modele ({provider.models.length})
+              </Label>
+              <div className="flex flex-wrap gap-1">
+                {provider.models.slice(0, 5).map((model) => (
+                  <Badge key={model} variant="outline" className="text-xs">
+                    {model}
+                  </Badge>
+                ))}
+                {provider.models.length > 5 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{provider.models.length - 5} więcej
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )
+        ) : (
+          // Other providers - show models only if API key is set
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">
-              Dostępne Modele ({provider.models.length})
+              Modele
             </Label>
-            <div className="flex flex-wrap gap-1">
-              {provider.models.slice(0, 5).map((model) => (
-                <Badge key={model} variant="outline" className="text-xs">
-                  {model}
-                </Badge>
-              ))}
-              {provider.models.length > 5 && (
-                <Badge variant="outline" className="text-xs">
-                  +{provider.models.length - 5} więcej
-                </Badge>
-              )}
-            </div>
+            {!provider.apiKey ? (
+              <p className="text-xs text-muted-foreground italic">
+                Ustaw API key, aby używać tego providera
+              </p>
+            ) : provider.models.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {provider.models.slice(0, 5).map((model) => (
+                  <Badge key={model} variant="outline" className="text-xs">
+                    {model}
+                  </Badge>
+                ))}
+                {provider.models.length > 5 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{provider.models.length - 5} więcej
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">
+                Edytuj providera, aby dodać modele
+              </p>
+            )}
           </div>
         )}
       </CardContent>

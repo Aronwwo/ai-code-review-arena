@@ -152,7 +152,9 @@ export function Settings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {providers.map((provider, index) => (
+          {providers
+            .filter(p => p.id !== 'ollama') // Ollama has its own section above
+            .map((provider, index) => (
             <div key={provider.id}>
               {index > 0 && <Separator className="my-4" />}
               <ProviderCard
