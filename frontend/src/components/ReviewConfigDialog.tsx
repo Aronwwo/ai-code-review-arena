@@ -17,6 +17,7 @@ interface AgentConfig {
   enabled: boolean;
   provider: string;
   model: string;
+  timeout: number; // timeout w sekundach (domyślnie 180 = 3 minuty)
 }
 
 interface TeamConfig {
@@ -33,7 +34,7 @@ export interface ReviewConfig {
   moderator: {
     provider: string;
     model: string;
-    type: 'debate' | 'consensus' | 'strategic';
+    timeout: number; // timeout w sekundach (domyślnie 300 = 5 minut)
   };
   mode: 'council' | 'arena' | null;
 }
@@ -62,7 +63,8 @@ const AGENT_ROLES = [
 const DEFAULT_AGENT_CONFIG: AgentConfig = {
   enabled: true,
   provider: 'ollama',
-  model: 'qwen2.5-coder:1.5b'
+  model: 'qwen2.5-coder:latest',
+  timeout: 180 // 3 minuty
 };
 
 const createDefaultTeam = (): TeamConfig => ({
@@ -94,7 +96,7 @@ export function ReviewConfigDialog({
     agents: createDefaultTeam(),
     teamA: createDefaultTeam(),
     teamB: createDefaultTeam(),
-    moderator: { provider: 'ollama', model: 'qwen2.5-coder:1.5b', type: 'debate' },
+    moderator: { provider: 'ollama', model: 'qwen2.5-coder:latest', timeout: 300 },
     mode: null,
   });
 
@@ -353,6 +355,23 @@ export function ReviewConfigDialog({
                       </div>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs">Timeout (sekundy)</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={30}
+                        max={600}
+                        className="w-20 p-2 border rounded-md text-sm bg-background"
+                        value={agent.timeout}
+                        onChange={(e) => updateTeamAgent(team, role.id, { timeout: parseInt(e.target.value) || 180 })}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        ({Math.floor(agent.timeout / 60)}:{String(agent.timeout % 60).padStart(2, '0')} min)
+                      </span>
+                    </div>
+                  </div>
                 </CardContent>
               )}
             </Card>
@@ -542,27 +561,6 @@ export function ReviewConfigDialog({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Moderator Type Selection - only for council mode */}
-                  {config.mode === 'council' && (
-                    <div className="space-y-2">
-                      <Label>Typ Moderatora</Label>
-                      <select
-                        className="w-full p-2 border rounded-md bg-background"
-                        value={config.moderator.type}
-                        onChange={(e) => updateModerator({ type: e.target.value as 'debate' | 'consensus' | 'strategic' })}
-                      >
-                        <option value="debate">Moderator Debaty</option>
-                        <option value="consensus">Syntezator Konsensusu</option>
-                        <option value="strategic">Strategiczny Koordynator</option>
-                      </select>
-                      <p className="text-xs text-muted-foreground">
-                        {config.moderator.type === 'debate' && '🎭 Aktywnie prowadzi dyskusję, zadaje pytania, rozstrzyga spory'}
-                        {config.moderator.type === 'consensus' && '🤝 Łączy różne perspektywy w spójne rekomendacje'}
-                        {config.moderator.type === 'strategic' && '🎯 Priorytetyzuje problemy, planuje kolejność działań'}
-                      </p>
-                    </div>
-                  )}
-
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Provider</Label>

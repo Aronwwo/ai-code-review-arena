@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { CodeViewer } from '@/components/CodeViewer';
 import { ConversationView } from '@/components/ConversationView';
 import { useReviewWebSocket } from '@/hooks/useReviewWebSocket';
-import { ArrowLeft, AlertCircle, AlertTriangle, Info, FileCode, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Loader2, CheckCircle2, XCircle, Radio } from 'lucide-react';
+import { ArrowLeft, AlertCircle, AlertTriangle, Info, FileCode, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Loader2, CheckCircle2, XCircle, Radio, Clock, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProjectWithFiles {
@@ -45,6 +45,8 @@ export function ReviewDetail() {
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState('issues');
+  const [expandedAgents, setExpandedAgents] = useState<Set<number>>(new Set());
+  const [showAgentResponses, setShowAgentResponses] = useState(false);
   const pageSize = 10;
 
   const { data: review, isLoading: reviewLoading } = useQuery<Review>({
@@ -115,7 +117,8 @@ export function ReviewDetail() {
     enabled: !!id,
   });
 
-  const { data: conversations } = useQuery<ConversationSummary[]>({
+  // Query for conversations (used by ConversationView component internally)
+  const { data: _conversations } = useQuery<ConversationSummary[]>({
     queryKey: ['conversations', id],
     queryFn: async () => {
       const response = await api.get(`/reviews/${id}/conversations`);
@@ -141,6 +144,18 @@ export function ReviewDetail() {
         next.delete(issueId);
       } else {
         next.add(issueId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAgent = (agentId: number) => {
+    setExpandedAgents(prev => {
+      const next = new Set(prev);
+      if (next.has(agentId)) {
+        next.delete(agentId);
+      } else {
+        next.add(agentId);
       }
       return next;
     });
@@ -204,18 +219,11 @@ export function ReviewDetail() {
     return <div className="text-center py-12">Przegląd nie znaleziony</div>;
   }
 
-  const councilConversation = conversations
-    ?.filter((c) => c.mode === 'council' && c.summary)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-  let moderatorSummaryText: string | null = null;
-  if (councilConversation?.summary) {
-    try {
-      const parsed = JSON.parse(councilConversation.summary);
-      moderatorSummaryText = parsed.summary || councilConversation.summary;
-    } catch {
-      moderatorSummaryText = councilConversation.summary;
-    }
-  }
+  // Raport moderatora z review.summary (nowy flow)
+  const moderatorSummaryText = review?.summary || null;
+
+  // Liczba agentów z timeout
+  const timedOutAgents = agents?.filter(a => a.timed_out) || [];
 
   const categories = Array.from(new Set(issues.map((i) => i.category)));
   // Note: These counts are for the current page. For total counts, we'd need separate API calls.
@@ -341,21 +349,118 @@ export function ReviewDetail() {
         </Card>
       </div>
 
-      {/* Agents */}
-      {agents && agents.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Agenci Przeglądu</CardTitle>
+      {/* Moderator Summary - główny raport */}
+      {review.status === 'completed' && moderatorSummaryText && (
+        <Card className="border-2 border-primary/30 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              Raport Moderatora
+            </CardTitle>
+            <CardDescription>
+              Końcowy raport na podstawie analizy wszystkich agentów
+              {timedOutAgents.length > 0 && (
+                <span className="ml-2 text-yellow-600">
+                  ({timedOutAgents.length} agent(ów) przekroczyło limit czasu)
+                </span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
+            <div className="prose prose-sm max-w-none dark:prose-invert">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{moderatorSummaryText}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Agents - rozwijalna sekcja */}
+      {agents && agents.length > 0 && (
+        <Card>
+          <CardHeader
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setShowAgentResponses(!showAgentResponses)}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Bot className="h-5 w-5" />
+                  Odpowiedzi Agentów ({agents.length})
+                </CardTitle>
+                <CardDescription>
+                  Kliknij, aby zobaczyć szczegółowe odpowiedzi każdego agenta
+                </CardDescription>
+              </div>
+              <Button variant="ghost" size="sm">
+                {showAgentResponses ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
               {agents.map((agent) => (
-                <Badge key={agent.id} variant="secondary" className="px-3 py-1">
-                  {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)} Agent
+                <Badge
+                  key={agent.id}
+                  variant={agent.timed_out ? "destructive" : "secondary"}
+                  className="px-3 py-1 flex items-center gap-1"
+                >
+                  {agent.timed_out && <Clock className="h-3 w-3" />}
+                  {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)}
+                  <span className="text-xs opacity-70">({agent.provider}/{agent.model.split('/').pop()})</span>
                 </Badge>
               ))}
             </div>
-          </CardContent>
+          </CardHeader>
+          {showAgentResponses && (
+            <CardContent className="space-y-4">
+              {agents.map((agent) => (
+                <Card
+                  key={agent.id}
+                  className={`overflow-hidden ${agent.timed_out ? 'border-yellow-500/50 bg-yellow-500/5' : ''}`}
+                >
+                  <CardHeader
+                    className="cursor-pointer hover:bg-muted/30 transition-colors py-3"
+                    onClick={() => toggleAgent(agent.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {agent.timed_out ? (
+                          <Clock className="h-4 w-4 text-yellow-500" />
+                        ) : agent.parsed_successfully ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                        <span className="font-medium">
+                          {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)} Agent
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {agent.provider} / {agent.model}
+                        </Badge>
+                        {agent.timed_out && (
+                          <Badge variant="destructive" className="text-xs">
+                            TIMEOUT ({agent.timeout_seconds}s)
+                          </Badge>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="sm">
+                        {expandedAgents.has(agent.id) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  {expandedAgents.has(agent.id) && (
+                    <CardContent className="pt-0">
+                      {agent.raw_output ? (
+                        <div className="bg-muted/50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                          <pre className="text-xs whitespace-pre-wrap font-mono">{agent.raw_output}</pre>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">Brak odpowiedzi</p>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              ))}
+            </CardContent>
+          )}
         </Card>
       )}
 
@@ -371,19 +476,6 @@ export function ReviewDetail() {
         </TabsList>
 
           <TabsContent value="issues" className="space-y-4">
-            {moderatorSummaryText && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Podsumowanie Moderatora</CardTitle>
-                  <CardDescription>
-                    Podsumowanie powstałe na podstawie dyskusji agentów (Council).
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap text-sm">{moderatorSummaryText}</p>
-                </CardContent>
-              </Card>
-            )}
           {/* Filters */}
           <Card>
             <CardContent className="pt-4">

@@ -265,6 +265,7 @@ export function ProjectDetail() {
             model: agent.model,
             temperature: 0.2,
             max_tokens: 2048,
+            timeout_seconds: agent.timeout || 180,
             custom_provider: customProvider,
           };
         }
@@ -276,13 +277,13 @@ export function ProjectDetail() {
         provider: config.moderator.provider,
         model: config.moderator.model,
         temperature: 0.0,
-        max_tokens: 1024,
+        max_tokens: 4096,
+        timeout_seconds: config.moderator.timeout || 300,
         custom_provider: moderatorCustomProvider,
       };
 
       startReviewMutation.mutate({
         review_mode: 'council',
-        moderator_type: config.moderator.type,
         agent_roles: enabledRoles,
         agent_configs: agentConfigs,
         moderator_config: moderatorConfig,

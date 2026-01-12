@@ -1,4 +1,5 @@
 """Review orchestrator for conducting multi-agent code reviews."""
+import asyncio
 import json
 import hashlib
 import logging
@@ -8,8 +9,6 @@ from pydantic import BaseModel, ValidationError
 from app.models.project import Project
 from app.models.file import File
 from app.models.review import Review, ReviewAgent, Issue, Suggestion, IssueSeverity, AgentConfig
-from app.models.conversation import Conversation
-from app.orchestrators.conversation import ConversationOrchestrator
 from app.providers.base import LLMMessage
 from app.providers.router import provider_router, CustomProviderConfig
 from app.utils.cache import cache
@@ -101,6 +100,33 @@ Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."""
     }
 
+    MODERATOR_PROMPT = """Jesteś Moderatorem przeglądu kodu. Poniżej znajdują się odpowiedzi od różnych agentów-ekspertów.
+
+UWAGA: Agenci oznaczeni jako [TIMEOUT] nie odpowiedzieli w wyznaczonym czasie - IGNORUJ ich całkowicie.
+
+Twoim zadaniem jest:
+1. Przeanalizować odpowiedzi wszystkich agentów (oprócz tych z timeout)
+2. Stworzyć JEDEN końcowy raport, który syntetyzuje wszystkie znalezione problemy
+3. Usunąć duplikaty i podsumować najważniejsze kwestie
+4. Ocenić ogólną jakość kodu
+
+Odpowiedz w formacie JSON:
+{
+  "summary": "Ogólne podsumowanie przeglądu kodu PO POLSKU - 2-3 zdania",
+  "issues": [
+    {
+      "severity": "info" | "warning" | "error",
+      "category": "security" | "performance" | "style" | "best-practices",
+      "title": "Krótki tytuł PO POLSKU",
+      "description": "Szczegółowy opis PO POLSKU",
+      "suggested_fix": "Sugestia naprawy PO POLSKU (opcjonalne)"
+    }
+  ],
+  "overall_quality": "Ocena ogólna: świetny / dobry / wymaga poprawy / słaby"
+}
+
+Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
+
     def __init__(self, session: Session):
         """Initialize review orchestrator.
 
@@ -120,23 +146,21 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
     ) -> Review:
         """Przeprowadź code review używając wielu agentów AI.
 
-        Obsługuje dwa tryby:
-        - COUNCIL: Agenci współpracują, dyskutują, moderator podsumowuje konsensus
-        - ARENA: Agenci debatują przeciwstawne stanowiska, moderator wydaje werdykt
+        Uproszczony flow dla obu trybów (council/arena):
+        1. Każdy agent daje JEDNĄ odpowiedź (z konfigurowlnym timeout)
+        2. Moderator syntetyzuje wszystkie odpowiedzi w jeden raport
+        3. Agenci z timeout są oznaczani i ignorowani przez moderatora
 
         Args:
             review_id: ID review do przeprowadzenia
             provider_name: Provider LLM (opcjonalny fallback)
             model: Nazwa modelu (opcjonalny fallback)
             api_keys: Klucze API per provider: {provider_name: api_key}
-            agent_configs: Konfiguracja per agent: {role: AgentConfig}
+            agent_configs: Konfiguracja per agent: {role: AgentConfig} z timeout_seconds
             moderator_config: Konfiguracja moderatora
 
         Returns:
             Ukończony obiekt Review ze statusem 'completed' lub 'failed'
-
-        Raises:
-            ValueError: Jeśli review nie istnieje lub ma nieprawidłowy tryb
         """
         # Pobierz review i projekt
         review = self.session.get(Review, review_id)
@@ -147,12 +171,7 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
         if not project:
             raise ValueError(f"Project {review.project_id} nie istnieje")
 
-        # Ustalenie trybu review
         review_mode = review.review_mode or "council"
-
-        if review_mode not in ("council", "arena"):
-            raise ValueError(f"Nieznany tryb review: '{review_mode}'. Dozwolone: 'council', 'arena'")
-
         logger.info(f"Review {review_id}: tryb {review_mode.upper()}")
 
         # Update review status
@@ -170,9 +189,8 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
             await ws_manager.send_review_started(review_id, agent_roles)
 
             # Normalize configs
-            typed_agent_configs: dict[str, AgentConfig] | None = None
+            typed_agent_configs: dict[str, AgentConfig] = {}
             if agent_configs:
-                typed_agent_configs = {}
                 for role, config in agent_configs.items():
                     typed_agent_configs[role] = config if isinstance(config, AgentConfig) else AgentConfig(**config)
 
@@ -184,51 +202,55 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
                     else AgentConfig(**moderator_config)
                 )
 
-            if review_mode == "council":
-                # Tryb Council: agenci współpracują, moderator podsumowuje
-                await self._run_council_review(
-                    review=review,
-                    project=project,
-                    agents_list=agents_list,
-                    agent_configs=typed_agent_configs,
-                    moderator_config=typed_moderator_config,
-                    provider_name=provider_name,
-                    model=model,
-                    api_keys=api_keys
-                )
-            else:
-                # Tryb Arena: agenci analizują niezależnie
-                # TODO: Dodać logikę debaty między agentami
-                for agent in agents_list:
-                    # Get agent config if available
-                    agent_config = typed_agent_configs.get(agent.role) if typed_agent_configs else None
+            # === KROK 1: Uruchom wszystkich agentów ===
+            agent_responses: dict[str, str | None] = {}
 
-                    # Use agent's provider/model if configured, otherwise fall back to parameters
-                    agent_provider = agent.provider if agent.provider != "mock" else (provider_name or agent.provider)
-                    agent_model = agent.model if agent.model != "default" else (model or agent.model)
+            for agent in agents_list:
+                # Get agent config if available
+                agent_config = typed_agent_configs.get(agent.role)
 
-                    # Get API key for this agent's provider
-                    agent_api_key = None
-                    if api_keys and agent_provider:
-                        agent_api_key = api_keys.get(agent_provider.lower())
+                # Use agent's provider/model if configured
+                agent_provider = agent.provider if agent.provider != "mock" else (provider_name or agent.provider)
+                agent_model = agent.model if agent.model != "default" else (model or agent.model)
 
-                    # Get custom provider config if available
-                    custom_provider_config = None
-                    if agent_config and agent_config.custom_provider:
-                        cp = agent_config.custom_provider
-                        custom_provider_config = CustomProviderConfig(
-                            id=cp.id,
-                            name=cp.name,
-                            base_url=cp.base_url,
-                            api_key=cp.api_key,
-                            header_name=cp.header_name,
-                            header_prefix=cp.header_prefix
-                        )
+                # Get timeout from config (default 180s = 3 min)
+                timeout_seconds = agent_config.timeout_seconds if agent_config else 180
 
-                    await self._run_agent(
-                        review, project, agent, agent_provider, agent_model,
-                        agent_api_key, custom_provider_config
+                # Get API key for this agent's provider
+                agent_api_key = None
+                if api_keys and agent_provider:
+                    agent_api_key = api_keys.get(agent_provider.lower())
+
+                # Get custom provider config if available
+                custom_provider_config = None
+                if agent_config and agent_config.custom_provider:
+                    cp = agent_config.custom_provider
+                    custom_provider_config = CustomProviderConfig(
+                        id=cp.id,
+                        name=cp.name,
+                        base_url=cp.base_url,
+                        api_key=cp.api_key,
+                        header_name=cp.header_name,
+                        header_prefix=cp.header_prefix
                     )
+
+                # Run agent with timeout
+                response = await self._run_agent(
+                    review, project, agent, agent_provider, agent_model,
+                    agent_api_key, custom_provider_config, timeout_seconds
+                )
+                agent_responses[agent.role] = response
+
+            # === KROK 2: Uruchom moderatora ===
+            await self._run_moderator(
+                review=review,
+                project=project,
+                agent_responses=agent_responses,
+                moderator_config=typed_moderator_config,
+                provider_name=provider_name,
+                model=model,
+                api_keys=api_keys
+            )
 
             # Mark review as completed
             review.status = "completed"
@@ -240,6 +262,7 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
             await ws_manager.send_review_completed(review_id, total_issues)
 
         except Exception as e:
+            logger.exception(f"Review {review_id} failed: {e}")
             # Mark review as failed
             review.status = "failed"
             review.error_message = str(e)[:2000]
@@ -254,6 +277,105 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
 
         return review
 
+    async def _run_moderator(
+        self,
+        review: Review,
+        project: Project,
+        agent_responses: dict[str, str | None],
+        moderator_config: AgentConfig | None,
+        provider_name: str | None,
+        model: str | None,
+        api_keys: dict[str, str] | None
+    ):
+        """Run moderator to synthesize all agent responses into final report.
+
+        Args:
+            review: Review object
+            project: Project being reviewed
+            agent_responses: Dict of {role: response} (None means timeout)
+            moderator_config: Moderator configuration
+            provider_name: Fallback provider
+            model: Fallback model
+            api_keys: API keys per provider
+        """
+        # Build moderator prompt with all agent responses
+        responses_text = ""
+        for role, response in agent_responses.items():
+            role_name = {
+                "general": "Ekspert Ogólny",
+                "security": "Ekspert Bezpieczeństwa",
+                "performance": "Ekspert Wydajności",
+                "style": "Ekspert Stylu"
+            }.get(role, role.title())
+
+            if response is None:
+                responses_text += f"\n### {role_name} [TIMEOUT]\nAgent nie odpowiedział w wyznaczonym czasie.\n"
+            else:
+                responses_text += f"\n### {role_name}\n{response}\n"
+
+        user_prompt = f"""Projekt: {project.name}
+
+Odpowiedzi agentów:
+{responses_text}
+
+Stwórz końcowy raport przeglądu kodu."""
+
+        messages = [
+            LLMMessage(role="system", content=self.MODERATOR_PROMPT),
+            LLMMessage(role="user", content=user_prompt)
+        ]
+
+        # Get moderator provider/model
+        mod_provider = moderator_config.provider if moderator_config else provider_name
+        mod_model = moderator_config.model if moderator_config else model
+        mod_timeout = moderator_config.timeout_seconds if moderator_config else 300  # 5 min default for moderator
+
+        # Get API key
+        mod_api_key = None
+        if api_keys and mod_provider:
+            mod_api_key = api_keys.get(mod_provider.lower())
+
+        # Custom provider for moderator
+        custom_provider_config = None
+        if moderator_config and moderator_config.custom_provider:
+            cp = moderator_config.custom_provider
+            custom_provider_config = CustomProviderConfig(
+                id=cp.id,
+                name=cp.name,
+                base_url=cp.base_url,
+                api_key=cp.api_key,
+                header_name=cp.header_name,
+                header_prefix=cp.header_prefix
+            )
+
+        try:
+            async with asyncio.timeout(mod_timeout):
+                raw_output, response_provider, response_model = await provider_router.generate(
+                    messages=messages,
+                    provider_name=mod_provider,
+                    model=mod_model,
+                    temperature=0.0,
+                    max_tokens=8192,
+                    api_key=mod_api_key,
+                    custom_provider_config=custom_provider_config
+                )
+
+            # Store moderator summary in review
+            review.summary = raw_output[:50000]
+            self.session.add(review)
+            self.session.commit()
+
+            # Parse and store issues from moderator response
+            await self._store_moderator_issues(review, raw_output)
+
+            logger.info(f"Moderator completed for review {review.id}")
+
+        except asyncio.TimeoutError:
+            logger.error(f"Moderator timed out for review {review.id}")
+            review.summary = "[TIMEOUT] Moderator przekroczył limit czasu"
+            self.session.add(review)
+            self.session.commit()
+
     async def _run_agent(
         self,
         review: Review,
@@ -262,9 +384,10 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
         provider_name: str | None,
         model: str | None,
         api_key: str | None = None,
-        custom_provider_config: CustomProviderConfig | None = None
+        custom_provider_config: CustomProviderConfig | None = None,
+        timeout_seconds: int = 180
     ):
-        """Run a single agent for the review.
+        """Run a single agent for the review with timeout handling.
 
         Args:
             review: Review object
@@ -274,9 +397,13 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
             model: Model name to use
             api_key: API key for the provider (optional)
             custom_provider_config: Configuration for custom provider (optional)
+            timeout_seconds: Maximum time for agent response (default 180s = 3 min)
         """
         # Send agent started event
         await ws_manager.send_agent_started(review.id, agent.role)
+
+        # Store configured timeout
+        agent.timeout_seconds = timeout_seconds
 
         # Build prompt
         system_prompt = self.AGENT_PROMPTS.get(agent.role, self.AGENT_PROMPTS["general"])
@@ -287,122 +414,92 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
             LLMMessage(role="user", content=user_prompt)
         ]
 
-        # Check cache if enabled
-        cache_key = None
-        effective_provider = custom_provider_config.id if custom_provider_config else (provider_name or settings.default_provider)
-        if settings.enable_agent_caching:
-            cache_key = cache.generate_llm_cache_key(
-                provider=effective_provider,
-                model=model or settings.default_model,
-                prompt=system_prompt + user_prompt,
-                temperature=0.0
-            )
-            cached_response = cache.get(cache_key)
-            if cached_response:
-                raw_output = cached_response
-                response_provider = effective_provider
-                response_model = model or settings.default_model
-            else:
-                # Generate response
-                raw_output, response_provider, response_model = await provider_router.generate(
-                    messages=messages,
-                    provider_name=provider_name,
-                    model=model,
-                    temperature=0.0,
-                    max_tokens=4096,
-                    api_key=api_key,
-                    custom_provider_config=custom_provider_config
-                )
-                # Cache the response
-                cache.set(cache_key, raw_output)
-        else:
-            # Generate response without caching
-            raw_output, response_provider, response_model = await provider_router.generate(
-                messages=messages,
-                provider_name=provider_name,
-                model=model,
-                temperature=0.0,
-                max_tokens=4096,
-                api_key=api_key,
-                custom_provider_config=custom_provider_config
-            )
-
-        # Parse response
-        parsed_successfully, issues_data = self._parse_response(raw_output)
-
-        # Update the existing agent record
-        agent.provider = response_provider
-        agent.model = response_model
-        agent.raw_output = raw_output[:50000]  # Truncate if too long
-        agent.parsed_successfully = parsed_successfully
-
-        self.session.add(agent)
-        self.session.commit()
-
-        # Store issues
-        for issue_data in issues_data:
-            await self._store_issue(review, issue_data)
-
-        # Send agent completed event
-        await ws_manager.send_agent_completed(
-            review.id,
-            agent.role,
-            len(issues_data),
-            parsed_successfully
-        )
-
-    async def _run_council_review(
-        self,
-        review: Review,
-        project: Project,
-        agents_list: list[ReviewAgent],
-        agent_configs: dict[str, AgentConfig] | None,
-        moderator_config: AgentConfig | None,
-        provider_name: str | None,
-        model: str | None,
-        api_keys: dict[str, str] | None
-    ):
-        """Run council review using multi-round conversation and moderator synthesis."""
-        # Create conversation
-        conversation = Conversation(
-            review_id=review.id,
-            mode="council",
-            topic_type="review",
-            status="running"
-        )
-        self.session.add(conversation)
-        self.session.commit()
-        self.session.refresh(conversation)
-
-        review_agents_map = {agent.role: agent for agent in agents_list}
-        conversation_orchestrator = ConversationOrchestrator(self.session)
-
         try:
-            await conversation_orchestrator._run_council_mode(
-                conversation=conversation,
-                provider_name=provider_name,
-                model=model,
-                agent_configs=agent_configs,
-                moderator_config=moderator_config,
-                review_agents=review_agents_map,
-                rounds=settings.council_rounds,
-                api_keys=api_keys
-            )
-            conversation.status = "completed"
-            conversation.completed_at = datetime.now(timezone.utc)
-        except Exception as e:
-            conversation.status = "failed"
-            conversation.meta_info = {"error": str(e)}
-            conversation.completed_at = datetime.now(timezone.utc)
-            self.session.add(conversation)
+            # Run with timeout
+            async with asyncio.timeout(timeout_seconds):
+                # Check cache if enabled
+                cache_key = None
+                effective_provider = custom_provider_config.id if custom_provider_config else (provider_name or settings.default_provider)
+                if settings.enable_agent_caching:
+                    cache_key = cache.generate_llm_cache_key(
+                        provider=effective_provider,
+                        model=model or settings.default_model,
+                        prompt=system_prompt + user_prompt,
+                        temperature=0.0
+                    )
+                    cached_response = cache.get(cache_key)
+                    if cached_response:
+                        raw_output = cached_response
+                        response_provider = effective_provider
+                        response_model = model or settings.default_model
+                    else:
+                        # Generate response
+                        raw_output, response_provider, response_model = await provider_router.generate(
+                            messages=messages,
+                            provider_name=provider_name,
+                            model=model,
+                            temperature=0.0,
+                            max_tokens=4096,
+                            api_key=api_key,
+                            custom_provider_config=custom_provider_config
+                        )
+                        # Cache the response
+                        cache.set(cache_key, raw_output)
+                else:
+                    # Generate response without caching
+                    raw_output, response_provider, response_model = await provider_router.generate(
+                        messages=messages,
+                        provider_name=provider_name,
+                        model=model,
+                        temperature=0.0,
+                        max_tokens=4096,
+                        api_key=api_key,
+                        custom_provider_config=custom_provider_config
+                    )
+
+            # Parse response
+            parsed_successfully, issues_data = self._parse_response(raw_output)
+
+            # Update the existing agent record - SUCCESS
+            agent.provider = response_provider
+            agent.model = response_model
+            agent.raw_output = raw_output[:50000]  # Truncate if too long
+            agent.parsed_successfully = parsed_successfully
+            agent.timed_out = False
+
+            self.session.add(agent)
             self.session.commit()
-            raise
 
-        self.session.add(conversation)
-        self.session.commit()
+            # Send agent completed event
+            await ws_manager.send_agent_completed(
+                review.id,
+                agent.role,
+                len(issues_data),
+                parsed_successfully
+            )
 
-        # Parse moderator summary and store issues
-        await self._store_moderator_issues(review, conversation.summary)
+            return raw_output  # Return response for moderator
+
+        except asyncio.TimeoutError:
+            # Agent timed out
+            logger.warning(f"Agent {agent.role} timed out after {timeout_seconds}s")
+
+            agent.timed_out = True
+            agent.parsed_successfully = False
+            agent.raw_output = f"[TIMEOUT] Agent przekroczył limit czasu ({timeout_seconds} sekund)"
+
+            self.session.add(agent)
+            self.session.commit()
+
+            # Send agent completed event with timeout flag
+            await ws_manager.send_agent_completed(
+                review.id,
+                agent.role,
+                0,
+                False
+            )
+
+            return None  # No response
 
     async def _store_moderator_issues(self, review: Review, summary_text: str | None):
         """Parse moderator JSON summary and store issues for council review."""

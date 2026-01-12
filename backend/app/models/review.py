@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 ReviewStatus = Literal["pending", "running", "completed", "failed"]
 ReviewMode = Literal["council", "arena"]
-ModeratorType = Literal["debate", "consensus", "strategic"]
 IssueSeverity = Literal["info", "warning", "error"]
 IssueStatus = Literal["open", "confirmed", "dismissed", "resolved"]
 
@@ -43,13 +42,10 @@ class Review(SQLModel, table=True):
         default="council",
         max_length=20,
         index=True,
-        description="Tryb review: 'council' (współpraca) lub 'arena' (debata)"
+        description="Tryb review: 'council' (narada) lub 'arena' (walka)"
     )
-    moderator_type: str = Field(
-        default="debate",
-        max_length=20,
-        description="Typ moderatora: 'debate' (Moderator Debaty), 'consensus' (Syntezator), 'strategic' (Strategiczny)"
-    )
+    # Podsumowanie moderatora (końcowy raport)
+    summary: str | None = Field(default=None, max_length=50_000)
 
     # Relationships
     project: Project = Relationship(back_populates="reviews")
@@ -72,6 +68,10 @@ class ReviewAgent(SQLModel, table=True):
     raw_output: str | None = Field(default=None, max_length=50_000)
     parsed_successfully: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Timeout handling
+    timed_out: bool = Field(default=False, description="Czy agent przekroczył timeout")
+    timeout_seconds: int | None = Field(default=None, description="Ustawiony timeout w sekundach")
 
     # Relationships
     review: Review = Relationship(back_populates="agents")
@@ -147,6 +147,7 @@ class AgentConfig(SQLModel):
     prompt: str | None = None
     temperature: float = 0.2
     max_tokens: int = 2048
+    timeout_seconds: int = 180  # Domyślnie 3 minuty
     # For custom providers
     custom_provider: CustomProviderConfig | None = None
 
@@ -155,24 +156,19 @@ class ReviewCreate(SQLModel):
     """Schema do tworzenia nowego review.
 
     Wspiera dwa tryby:
-    - Council: Agenci współpracują, dyskutują, moderator podsumowuje konsensus
-    - Arena: Agenci debatują przeciwstawne stanowiska, moderator wydaje werdykt
+    - Council (narada): Agenci współpracują, moderator podsumowuje
+    - Arena (walka): Zespoły rywalizują, moderator wydaje werdykt
 
     Wymagane pola:
     - review_mode: 'council' lub 'arena'
-    - moderator_type: 'debate', 'consensus' lub 'strategic'
     - agent_roles: lista ról agentów (np. ['general', 'security'])
-    - agent_configs: konfiguracja dla każdej roli
+    - agent_configs: konfiguracja dla każdej roli (z timeout_seconds)
     - moderator_config: konfiguracja moderatora
     """
     # Wybór trybu review
     review_mode: ReviewMode = Field(
         ...,
-        description="Tryb review: 'council' (współpraca) lub 'arena' (debata)"
-    )
-    moderator_type: ModeratorType = Field(
-        ...,
-        description="Typ moderatora: 'debate', 'consensus' lub 'strategic'"
+        description="Tryb review: 'council' (narada) lub 'arena' (walka)"
     )
 
     # Konfiguracja agentów
@@ -215,7 +211,7 @@ class ReviewRead(SQLModel):
     agent_count: int = 0
     issue_count: int = 0
     review_mode: ReviewMode = "council"
-    moderator_type: ModeratorType = "debate"
+    summary: str | None = None  # Raport moderatora
 
 
 class ReviewAgentRead(SQLModel):
@@ -227,6 +223,9 @@ class ReviewAgentRead(SQLModel):
     provider: str
     model: str
     parsed_successfully: bool
+    timed_out: bool = False
+    timeout_seconds: int | None = None
+    raw_output: str | None = None  # Odpowiedź agenta
     created_at: datetime
 
 

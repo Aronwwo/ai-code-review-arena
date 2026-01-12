@@ -102,9 +102,7 @@ async def create_review(
             }
         )
 
-    # Tworzenie review
-    moderator_type = review_data.moderator_type
-
+    # Walidacja konfiguracji
     if not review_data.agent_configs:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -122,8 +120,7 @@ async def create_review(
         project_id=project_id,
         created_by=current_user.id,
         status="pending",
-        review_mode=review_mode,
-        moderator_type=moderator_type
+        review_mode=review_mode
     )
     session.add(review)
     session.commit()
@@ -147,7 +144,8 @@ async def create_review(
             role=role,
             provider=provider,
             model=model,
-            parsed_successfully=False
+            parsed_successfully=False,
+            timeout_seconds=config.timeout_seconds
         )
         session.add(agent)
 

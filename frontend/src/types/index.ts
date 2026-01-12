@@ -80,7 +80,7 @@ export interface Review {
   agent_count: number;
   issue_count: number;
   review_mode?: ReviewMode;
-  moderator_type?: 'debate' | 'consensus' | 'strategic';
+  summary?: string | null;
 }
 
 export interface AgentConfig {
@@ -88,6 +88,7 @@ export interface AgentConfig {
   model: string;
   temperature?: number;
   max_tokens?: number;
+  timeout_seconds?: number;
   custom_provider?: {
     id: string;
     name: string;
@@ -100,7 +101,6 @@ export interface AgentConfig {
 
 export interface ReviewCreate {
   review_mode: ReviewMode;
-  moderator_type: 'debate' | 'consensus' | 'strategic';
   agent_roles: string[];
   provider?: string;
   model?: string;
@@ -116,6 +116,9 @@ export interface ReviewAgent {
   provider: string;
   model: string;
   parsed_successfully: boolean;
+  timed_out: boolean;
+  timeout_seconds: number | null;
+  raw_output: string | null;
   created_at: string;
 }
 
