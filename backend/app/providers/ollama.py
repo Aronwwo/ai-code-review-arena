@@ -68,7 +68,7 @@ class OllamaProvider(LLMProvider):
             Generated text
         """
         if model is None:
-            model = "qwen2.5-coder:1.5b"
+            model = "qwen2.5-coder:latest"
 
         # Build prompt from messages
         # Ollama /api/generate endpoint expects a single prompt
@@ -84,7 +84,8 @@ class OllamaProvider(LLMProvider):
         prompt += "Assistant: "
 
         # Make request to Ollama with retry on timeout
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Increased timeout to 120s for large models that need loading time
+        async with httpx.AsyncClient(timeout=120.0) as client:
             max_retries = 2
             last_error = None
 
