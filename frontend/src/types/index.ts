@@ -79,10 +79,8 @@ export interface Review {
   error_message: string | null;
   agent_count: number;
   issue_count: number;
-  // Nowe pola dla Arena
-  review_mode?: ReviewMode;  // 'council' (domyślny) lub 'combat_arena'
-  arena_schema_name?: string | null;  // 'A' lub 'B' (tylko dla combat_arena)
-  arena_session_id?: number | null;  // ID sesji Arena (tylko dla combat_arena)
+  review_mode?: ReviewMode;
+  moderator_type?: 'debate' | 'consensus' | 'strategic';
 }
 
 export interface AgentConfig {
@@ -194,69 +192,69 @@ export interface ConversationCreate {
   model?: string;
 }
 
-// ==================== COMBAT ARENA TYPES ====================
-// Combat Arena - porównywanie dwóch pełnych schematów review (A vs B)
+// Review mode types
+export type ReviewMode = 'council' | 'arena';
 
-export type ReviewMode = 'council' | 'combat_arena';
-export type ArenaStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+// Arena types
+export type ArenaStatus = 'pending' | 'running' | 'voting' | 'completed' | 'failed';
 export type ArenaWinner = 'A' | 'B' | 'tie';
 
-/**
- * Sesja Combat Arena - porównanie dwóch pełnych schematów konfiguracji.
- * Każdy schemat zawiera konfigurację dla wszystkich 4 ról (general, security, performance, style).
- */
+export interface ArenaTeamConfig {
+  general: AgentConfig;
+  security: AgentConfig;
+  performance: AgentConfig;
+  style: AgentConfig;
+}
+
+export interface ArenaIssue {
+  severity: 'info' | 'warning' | 'error';
+  category: string;
+  title: string;
+  description: string;
+  file_name: string | null;
+  line_start: number | null;
+  line_end: number | null;
+}
+
 export interface ArenaSession {
   id: number;
   project_id: number;
   created_by: number;
   status: ArenaStatus;
-  schema_a_config: Record<string, AgentConfig>;  // {general: {...}, security: {...}, performance: {...}, style: {...}}
-  schema_b_config: Record<string, AgentConfig>;
-  review_a_id: number | null;
-  review_b_id: number | null;
+  error_message: string | null;
+  team_a_config: ArenaTeamConfig;
+  team_b_config: ArenaTeamConfig;
+  team_a_summary: string | null;
+  team_b_summary: string | null;
+  team_a_issues: ArenaIssue[];
+  team_b_issues: ArenaIssue[];
   winner: ArenaWinner | null;
   vote_comment: string | null;
-  voter_id: number | null;
   voted_at: string | null;
-  error_message: string | null;
   created_at: string;
   completed_at: string | null;
 }
 
-/**
- * Request do utworzenia nowej sesji Arena.
- * Oba schematy (A i B) MUSZĄ zawierać konfigurację dla wszystkich 4 ról.
- */
 export interface ArenaSessionCreate {
   project_id: number;
-  schema_a_config: Record<string, AgentConfig>;
-  schema_b_config: Record<string, AgentConfig>;
+  team_a_config: ArenaTeamConfig;
+  team_b_config: ArenaTeamConfig;
   api_keys?: Record<string, string>;
 }
 
-/**
- * Request do głosowania w sesji Arena.
- */
-export interface ArenaVoteCreate {
+export interface ArenaVote {
   winner: ArenaWinner;
   comment?: string;
 }
 
-/**
- * Ranking ELO dla pełnego schematu konfiguracji (4 role).
- * Identyfikowany przez SHA-256 hash konfiguracji JSON.
- */
-export interface SchemaRating {
+export interface TeamRating {
   id: number;
-  schema_hash: string;
-  schema_config: Record<string, AgentConfig>;
+  config_hash: string;
+  config: ArenaTeamConfig;
   elo_rating: number;
   games_played: number;
   wins: number;
   losses: number;
   ties: number;
-  avg_issues_found: number | null;
-  last_used_at: string | null;
-  created_at: string;
-  updated_at: string;
+  win_rate: number;
 }

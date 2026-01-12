@@ -9,7 +9,7 @@ from app.models import (
     User, Project, File, Review, ReviewAgent, Issue, Suggestion,
     Conversation, Message
 )
-from app.models.arena import ArenaSession, SchemaRating
+from app.models.arena import ArenaSession, TeamRating
 from sqlmodel import SQLModel
 
 # this is the Alembic Config object

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import { Project, FileWithContent, FileCreate, Review, ReviewCreate, AgentConfig } from '@/types';
+import { Project, FileWithContent, FileCreate, Review, ReviewCreate, AgentConfig, ArenaSession, ArenaSessionCreate, ArenaTeamConfig } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -74,7 +74,7 @@ export function ProjectDetail() {
     },
   });
 
-  // Start review mutation
+  // Start review mutation (council mode)
   const startReviewMutation = useMutation({
     mutationFn: async (data: ReviewCreate) => {
       const response = await api.post(`/projects/${id}/reviews`, data);
@@ -87,6 +87,22 @@ export function ProjectDetail() {
     },
     onError: (error: unknown) => {
       toast.error(parseApiError(error, 'Nie udało się uruchomić przeglądu'));
+    },
+  });
+
+  // Start arena session mutation (arena mode)
+  const startArenaMutation = useMutation({
+    mutationFn: async (data: ArenaSessionCreate) => {
+      const response = await api.post('/arena/sessions', data);
+      return response.data as ArenaSession;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['arena-sessions', id] });
+      toast.success('Sesja Arena uruchomiona pomyślnie!');
+      navigate(`/arena/${data.id}`);
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się uruchomić sesji Arena'));
     },
   });
 
@@ -205,15 +221,13 @@ export function ProjectDetail() {
       return undefined;
     };
 
-    // Build agent configs from dialog config
-    const agentConfigs: Record<string, AgentConfig> = {};
-    const enabledRoles: string[] = [];
-
-    for (const [role, agent] of Object.entries(config.agents)) {
-      if (agent.enabled) {
-        enabledRoles.push(role);
+    // Helper to build team config for Arena
+    const buildTeamConfig = (team: typeof config.teamA): ArenaTeamConfig => {
+      if (!team) throw new Error('Team config is required');
+      const result: Record<string, AgentConfig> = {};
+      for (const [role, agent] of Object.entries(team)) {
         const customProvider = getCustomProviderConfig(agent.provider);
-        agentConfigs[role] = {
+        result[role] = {
           provider: agent.provider,
           model: agent.model,
           temperature: 0.2,
@@ -221,37 +235,51 @@ export function ProjectDetail() {
           custom_provider: customProvider,
         };
       }
-    }
-
-    // Add moderator config
-    const moderatorCustomProvider = getCustomProviderConfig(config.moderator.provider);
-    const moderatorConfig = {
-      provider: config.moderator.provider,
-      model: config.moderator.model,
-      temperature: 0.0,
-      max_tokens: 1024,
-      custom_provider: moderatorCustomProvider,
+      return result as unknown as ArenaTeamConfig;
     };
 
-    // Route based on mode
     if (config.mode === 'arena') {
-      // Arena mode - send to POST /arena/sessions
-      try {
-        const response = await api.post('/arena/sessions', {
-          project_id: parseInt(id || '0'),
-          schema_a_config: config.arena_schema_a,
-          schema_b_config: config.arena_schema_b,
-          api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
-        });
-
-        queryClient.invalidateQueries({ queryKey: ['arena-sessions'] });
-        toast.success('Arena session started!');
-        navigate(`/arena/sessions/${response.data.id}`);
-      } catch (error: unknown) {
-        toast.error(parseApiError(error, 'Failed to start Arena session'));
+      // Arena mode - send to /arena/sessions with two teams
+      if (!config.teamA || !config.teamB) {
+        toast.error('Konfiguracja zespołów jest wymagana');
+        return;
       }
+
+      startArenaMutation.mutate({
+        project_id: Number(id),
+        team_a_config: buildTeamConfig(config.teamA),
+        team_b_config: buildTeamConfig(config.teamB),
+        api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
+      });
     } else {
-      // Council mode - send to POST /projects/{id}/reviews
+      // Council mode - send to /projects/{id}/reviews
+      const agentConfigs: Record<string, AgentConfig> = {};
+      const enabledRoles: string[] = [];
+
+      for (const [role, agent] of Object.entries(config.agents)) {
+        if (agent.enabled) {
+          enabledRoles.push(role);
+          const customProvider = getCustomProviderConfig(agent.provider);
+          agentConfigs[role] = {
+            provider: agent.provider,
+            model: agent.model,
+            temperature: 0.2,
+            max_tokens: 2048,
+            custom_provider: customProvider,
+          };
+        }
+      }
+
+      // Add moderator config
+      const moderatorCustomProvider = getCustomProviderConfig(config.moderator.provider);
+      const moderatorConfig = {
+        provider: config.moderator.provider,
+        model: config.moderator.model,
+        temperature: 0.0,
+        max_tokens: 1024,
+        custom_provider: moderatorCustomProvider,
+      };
+
       startReviewMutation.mutate({
         review_mode: 'council',
         moderator_type: config.moderator.type,
@@ -322,9 +350,9 @@ export function ProjectDetail() {
             </Button>
             <Button
               onClick={() => setIsReviewConfigOpen(true)}
-              disabled={startReviewMutation.isPending || (project.files?.length || 0) === 0}
+              disabled={startReviewMutation.isPending || startArenaMutation.isPending || (project.files?.length || 0) === 0}
             >
-              {startReviewMutation.isPending ? (
+              {(startReviewMutation.isPending || startArenaMutation.isPending) ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Uruchamianie...
@@ -670,7 +698,7 @@ export function ProjectDetail() {
         open={isReviewConfigOpen}
         onOpenChange={setIsReviewConfigOpen}
         onStartReview={handleStartReview}
-        isLoading={startReviewMutation.isPending}
+        isLoading={startReviewMutation.isPending || startArenaMutation.isPending}
         fileCount={project.files?.length || 0}
         totalCodeSize={project.files?.reduce((acc, f) => acc + f.size_bytes, 0) || 0}
       />

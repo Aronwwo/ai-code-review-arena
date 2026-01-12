@@ -1,469 +1,334 @@
-"""Orkiestrator dla Combat Arena - porównywanie pełnych schematów review.
+"""Arena orchestrator - przeprowadza walkę dwóch zespołów AI.
 
-Combat Arena pozwala użytkownikowi porównać dwa kompletne schematy konfiguracji:
-- Schemat A: pełna konfiguracja dla wszystkich 4 ról
-- Schemat B: pełna konfiguracja dla wszystkich 4 ról
-
-Orkiestrator:
-1. Tworzy ArenaSession
-2. Uruchamia dwa osobne review (A i B) równolegle
-3. Po zakończeniu czeka na głosowanie użytkownika
-4. Aktualizuje rankingi ELO na podstawie wyniku
+Przepływ:
+1. Pobiera projekt i pliki do analizy
+2. Uruchamia Zespół A (4 agentów analizują kod)
+3. Uruchamia Zespół B (4 agentów analizują kod)
+4. Generuje podsumowania dla każdego zespołu
+5. Ustawia status na "voting" - czeka na głos użytkownika
 """
 import logging
-import hashlib
-import json
-import asyncio
 from datetime import datetime, timezone
 from sqlmodel import Session, select
-from app.models.arena import ArenaSession, SchemaRating
-from app.models.review import Review, ReviewAgent, AgentConfig
-from app.orchestrators.review import ReviewOrchestrator
-from app.utils.elo import elo_update
-from app.providers.router import CustomProviderConfig
-from app.utils.cache import cache
+from pydantic import BaseModel, ValidationError
+
+from app.models.project import Project
+from app.models.file import File
+from app.models.arena import ArenaSession
+from app.providers.base import LLMMessage
+from app.providers.router import provider_router, CustomProviderConfig
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-class ArenaOrchestrator:
-    """Orkiestrator dla Combat Arena mode.
+class IssueSchema(BaseModel):
+    """Schema dla pojedynczego problemu znalezionego przez agenta."""
+    severity: str  # info, warning, error
+    category: str
+    title: str
+    description: str
+    file_name: str | None = None
+    line_start: int | None = None
+    line_end: int | None = None
 
-    Odpowiedzialny za:
-    - Tworzenie sesji Arena
-    - Uruchamianie dwóch równoległych review (Schemat A i B)
-    - Zbieranie wyników i głosów
-    - Aktualizację rankingów ELO
-    """
+
+class TeamResultSchema(BaseModel):
+    """Schema dla wyników zespołu."""
+    issues: list[IssueSchema]
+    summary: str
+
+
+class ArenaOrchestrator:
+    """Orkiestrator sesji Arena."""
+
+    # Prompty dla agentów (te same co w review)
+    AGENT_PROMPTS = {
+        "general": """Jesteś ekspertem ds. przeglądów kodu. Analizuj kod pod kątem:
+- Błędów logicznych i bugów
+- Czytelności i maintainability
+- Obsługi błędów
+- Struktury kodu
+
+Odpowiadaj krótko i konkretnie po polsku.""",
+
+        "security": """Jesteś ekspertem ds. bezpieczeństwa. Szukaj:
+- Luk injection (SQL, XSS, command)
+- Błędów uwierzytelniania/autoryzacji
+- Wycieku danych wrażliwych
+- Niebezpiecznych konfiguracji
+
+Odpowiadaj krótko i konkretnie po polsku.""",
+
+        "performance": """Jesteś ekspertem ds. wydajności. Szukaj:
+- Nieefektywnych algorytmów
+- Problemów N+1
+- Wycieków pamięci
+- Blokujących operacji
+
+Odpowiadaj krótko i konkretnie po polsku.""",
+
+        "style": """Jesteś ekspertem ds. stylu kodu. Sprawdzaj:
+- Konwencje nazewnictwa
+- Formatowanie
+- Dokumentację
+- Code smells
+
+Odpowiadaj krótko i konkretnie po polsku."""
+    }
+
+    SUMMARY_PROMPT = """Na podstawie analiz 4 agentów (general, security, performance, style),
+napisz zwięzłe podsumowanie znalezionych problemów.
+
+Analizy agentów:
+{agent_analyses}
+
+Napisz podsumowanie w formacie:
+1. Najważniejsze problemy (max 3)
+2. Ogólna ocena jakości kodu (1-10)
+3. Rekomendacja (1-2 zdania)
+
+Odpowiadaj po polsku, zwięźle i konkretnie."""
 
     def __init__(self, session: Session):
-        """Inicjalizacja orkiestratora.
-
-        Args:
-            session: Sesja bazodanowa SQLModel
-        """
+        """Inicjalizacja orchestratora."""
         self.session = session
-        self.review_orchestrator = ReviewOrchestrator(session)
 
-    async def conduct_arena(
-        self,
-        arena_session_id: int,
-        api_keys: dict[str, str] | None = None
-    ) -> ArenaSession:
-        """Przeprowadź sesję Arena - uruchom dwa review i porównaj wyniki.
-
-        Proces:
-        1. Pobierz ArenaSession z bazy
-        2. Utwórz Review dla Schematu A
-        3. Utwórz Review dla Schematu B
-        4. Uruchom oba review RÓWNOLEGLE (dla szybkości)
-        5. Oznacz sesję jako ukończoną (czeka na głosowanie)
+    async def run_arena(self, session_id: int, api_keys: dict | None = None):
+        """Przeprowadź sesję Arena.
 
         Args:
-            arena_session_id: ID sesji Arena
-            api_keys: Opcjonalne klucze API dla providerów
-
-        Returns:
-            Zaktualizowana ArenaSession
-
-        Raises:
-            ValueError: Jeśli sesja nie istnieje
+            session_id: ID sesji Arena
+            api_keys: Klucze API per provider
         """
-        # Walidacja: czy sesja istnieje
-        arena_session = self.session.get(ArenaSession, arena_session_id)
+        arena_session = self.session.get(ArenaSession, session_id)
         if not arena_session:
-            raise ValueError(f"Arena session {arena_session_id} nie istnieje")
+            raise ValueError(f"ArenaSession {session_id} nie istnieje")
 
-        # Oznacz jako running
+        project = self.session.get(Project, arena_session.project_id)
+        if not project:
+            raise ValueError(f"Project {arena_session.project_id} nie istnieje")
+
+        # Aktualizuj status
         arena_session.status = "running"
         self.session.add(arena_session)
         self.session.commit()
 
-        logger.info(f"Arena session {arena_session_id} rozpoczęta - uruchamiam review A i B")
-
         try:
-            # Uruchom oba review równolegle (dla szybkości)
-            review_a_task = self._create_and_run_review(
-                arena_session=arena_session,
-                schema_name="A",
-                schema_config=arena_session.schema_a_config,
-                api_keys=api_keys
+            # Pobierz pliki projektu
+            files_query = select(File).where(File.project_id == project.id)
+            files = self.session.exec(files_query).all()
+
+            if not files:
+                raise ValueError("Projekt nie ma żadnych plików do analizy")
+
+            # Zbuduj kontekst kodu
+            code_context = self._build_code_context(files)
+
+            # Uruchom oba zespoły
+            logger.info(f"Arena {session_id}: Uruchamiam Zespół A...")
+            team_a_result = await self._run_team(
+                arena_session.team_a_config, code_context, api_keys, "A"
             )
 
-            review_b_task = self._create_and_run_review(
-                arena_session=arena_session,
-                schema_name="B",
-                schema_config=arena_session.schema_b_config,
-                api_keys=api_keys
+            logger.info(f"Arena {session_id}: Uruchamiam Zespół B...")
+            team_b_result = await self._run_team(
+                arena_session.team_b_config, code_context, api_keys, "B"
             )
 
-            # Czekaj na oba review (równolegle)
-            review_a, review_b = await asyncio.gather(
-                review_a_task,
-                review_b_task,
-                return_exceptions=True  # Nie crashuj jeśli jeden z nich failuje
-            )
+            # Zapisz wyniki
+            arena_session.team_a_issues = [i.model_dump() for i in team_a_result.issues]
+            arena_session.team_b_issues = [i.model_dump() for i in team_b_result.issues]
+            arena_session.team_a_summary = team_a_result.summary
+            arena_session.team_b_summary = team_b_result.summary
+            arena_session.status = "voting"
 
-            # Sprawdź czy były błędy
-            if isinstance(review_a, Exception):
-                logger.error(f"Review A failed: {review_a}")
-                arena_session.status = "failed"
-                arena_session.error_message = f"Schema A failed: {str(review_a)[:1000]}"
-                self.session.add(arena_session)
-                self.session.commit()
-                return arena_session
-
-            if isinstance(review_b, Exception):
-                logger.error(f"Review B failed: {review_b}")
-                arena_session.status = "failed"
-                arena_session.error_message = f"Schema B failed: {str(review_b)[:1000]}"
-                self.session.add(arena_session)
-                self.session.commit()
-                return arena_session
-
-            # Zapisz ID review
-            arena_session.review_a_id = review_a.id
-            arena_session.review_b_id = review_b.id
-
-            # Oznacz jako completed (czeka na głosowanie)
-            arena_session.status = "completed"
-            arena_session.completed_at = datetime.now(timezone.utc)
-
-            logger.info(
-                f"Arena session {arena_session_id} zakończona - "
-                f"Review A: {review_a.id}, Review B: {review_b.id}"
-            )
+            logger.info(f"Arena {session_id}: Zakończono, czekam na głos")
 
         except Exception as e:
-            # Obsługa nieoczekiwanych błędów
-            logger.error(f"Arena session {arena_session_id} failed: {e}", exc_info=True)
             arena_session.status = "failed"
             arena_session.error_message = str(e)[:2000]
+            logger.error(f"Arena {session_id} failed: {e}")
 
-        # Zapisz zmiany
         self.session.add(arena_session)
         self.session.commit()
-        self.session.refresh(arena_session)
 
-        return arena_session
+    def _build_code_context(self, files: list[File]) -> str:
+        """Zbuduj kontekst kodu dla agentów."""
+        context_parts = []
+        for f in files:
+            context_parts.append(f"=== {f.name} ===\n{f.content}\n")
+        return "\n".join(context_parts)
 
-    async def _create_and_run_review(
+    async def _run_team(
         self,
-        arena_session: ArenaSession,
-        schema_name: str,
-        schema_config: dict,
-        api_keys: dict[str, str] | None
-    ) -> Review:
-        """Utwórz i uruchom review dla jednego schematu.
-
-        Proces:
-        1. Utwórz Review z odpowiednimi polami Arena
-        2. Utwórz ReviewAgent dla każdej roli (general, security, performance, style)
-        3. Uruchom review przez ReviewOrchestrator
-        4. Zwróć ukończony Review
+        team_config: dict,
+        code_context: str,
+        api_keys: dict | None,
+        team_name: str
+    ) -> TeamResultSchema:
+        """Uruchom zespół agentów i zbierz wyniki.
 
         Args:
-            arena_session: Sesja Arena
-            schema_name: Nazwa schematu ("A" lub "B")
-            schema_config: Konfiguracja schematu (dict z 4 rolami)
-            api_keys: Klucze API dla providerów
+            team_config: Konfiguracja zespołu (4 role)
+            code_context: Kod do analizy
+            api_keys: Klucze API
+            team_name: Nazwa zespołu (A lub B)
 
         Returns:
-            Ukończony Review
-
-        Raises:
-            Exception: Jeśli review failuje
+            TeamResultSchema z issues i summary
         """
-        logger.info(f"Tworzę review dla schematu {schema_name}")
+        all_issues = []
+        agent_analyses = {}
 
-        # Walidacja: czy schemat ma wszystkie 4 role
-        required_roles = {"general", "security", "performance", "style"}
-        provided_roles = set(schema_config.keys())
-        if provided_roles != required_roles:
-            raise ValueError(
-                f"Schema {schema_name} musi mieć wszystkie 4 role. "
-                f"Brakuje: {required_roles - provided_roles}, "
-                f"Nadmiarowe: {provided_roles - required_roles}"
-            )
+        # Uruchom każdego agenta
+        for role in ["general", "security", "performance", "style"]:
+            config = team_config.get(role, {})
+            provider = config.get("provider", "ollama")
+            model = config.get("model", "qwen2.5-coder:latest")
 
-        # 1. Utwórz Review
-        review = Review(
-            project_id=arena_session.project_id,
-            created_by=arena_session.created_by,
-            status="pending",
-            review_mode="combat_arena",
-            arena_schema_name=schema_name,
-            arena_session_id=arena_session.id
-        )
-        self.session.add(review)
-        self.session.commit()
-        self.session.refresh(review)
+            logger.info(f"Zespół {team_name}, {role}: {provider}/{model}")
 
-        logger.info(f"Review {review.id} utworzony dla schematu {schema_name}")
+            # Zbuduj prompt
+            system_prompt = self.AGENT_PROMPTS.get(role, self.AGENT_PROMPTS["general"])
+            user_prompt = f"""Przeanalizuj poniższy kod i znajdź problemy.
 
-        # 2. Utwórz ReviewAgent dla każdej roli
-        agent_configs_typed = {}
-        for role, config_dict in schema_config.items():
-            # Walidacja: czy config ma wymagane pola
-            if "provider" not in config_dict or "model" not in config_dict:
-                raise ValueError(
-                    f"Config dla roli {role} w schemacie {schema_name} "
-                    f"musi mieć 'provider' i 'model'"
+KOD DO ANALIZY:
+{code_context}
+
+Odpowiedz w formacie JSON:
+{{
+  "issues": [
+    {{
+      "severity": "info|warning|error",
+      "category": "kategoria problemu",
+      "title": "krótki tytuł",
+      "description": "opis problemu",
+      "file_name": "nazwa pliku lub null",
+      "line_start": numer linii lub null,
+      "line_end": numer linii lub null
+    }}
+  ],
+  "analysis": "Twoja ogólna analiza kodu (1-2 zdania)"
+}}"""
+
+            messages = [
+                LLMMessage(role="system", content=system_prompt),
+                LLMMessage(role="user", content=user_prompt)
+            ]
+
+            # Pobierz klucz API
+            api_key = api_keys.get(provider) if api_keys else None
+
+            try:
+                # Wywołaj LLM
+                response, _, _ = await provider_router.generate(
+                    messages=messages,
+                    provider_name=provider,
+                    model=model,
+                    temperature=0.2,
+                    max_tokens=4096,
+                    api_key=api_key
                 )
 
-            # Utwórz ReviewAgent
-            agent = ReviewAgent(
-                review_id=review.id,
-                role=role,
-                provider=config_dict["provider"],
-                model=config_dict["model"]
-            )
-            self.session.add(agent)
+                # Parsuj odpowiedź
+                issues, analysis = self._parse_agent_response(response, role)
+                all_issues.extend(issues)
+                agent_analyses[role] = analysis
 
-            # Przygotuj AgentConfig dla orkiestratora
-            agent_config = AgentConfig(**config_dict)
-            agent_configs_typed[role] = agent_config
+            except Exception as e:
+                logger.warning(f"Zespół {team_name}, {role} failed: {e}")
+                agent_analyses[role] = f"Błąd: {str(e)[:200]}"
 
-        self.session.commit()
+        # Wygeneruj podsumowanie
+        summary = await self._generate_summary(agent_analyses, api_keys, team_config)
 
-        logger.info(f"Review {review.id}: utworzono {len(agent_configs_typed)} agentów")
+        return TeamResultSchema(issues=all_issues, summary=summary)
 
-        # 3. Uruchom review
+    def _parse_agent_response(self, response: str, role: str) -> tuple[list[IssueSchema], str]:
+        """Parsuj odpowiedź agenta.
+
+        Args:
+            response: Surowa odpowiedź LLM
+            role: Rola agenta
+
+        Returns:
+            tuple: (lista issues, analiza tekstowa)
+        """
+        import json
+
+        issues = []
+        analysis = ""
+
         try:
-            await self.review_orchestrator.conduct_review(
-                review_id=review.id,
-                provider_name=None,  # Każdy agent ma własną konfigurację
-                model=None,
-                api_keys=api_keys,
-                agent_configs=agent_configs_typed,
-                moderator_config=None
-            )
-        except Exception as e:
-            logger.error(f"Review {review.id} (schema {schema_name}) failed: {e}")
-            raise
+            # Znajdź JSON w odpowiedzi
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start >= 0 and end > start:
+                json_str = response[start:end]
+                data = json.loads(json_str)
 
-        # Odśwież review z najnowszymi danymi
-        self.session.refresh(review)
+                # Parsuj issues
+                for issue_data in data.get("issues", []):
+                    try:
+                        issue = IssueSchema(**issue_data)
+                        issues.append(issue)
+                    except ValidationError:
+                        pass
 
-        logger.info(
-            f"Review {review.id} (schema {schema_name}) zakończony - "
-            f"status: {review.status}"
-        )
+                analysis = data.get("analysis", "")
+        except json.JSONDecodeError:
+            # Jeśli nie JSON, użyj całej odpowiedzi jako analizy
+            analysis = response[:1000]
 
-        return review
+        return issues, analysis or f"Analiza {role}: {len(issues)} problemów"
 
-    async def submit_vote(
+    async def _generate_summary(
         self,
-        arena_session_id: int,
-        winner: str,  # "A", "B", "tie"
-        voter_id: int,
-        comment: str | None = None
-    ) -> ArenaSession:
-        """Zapisz głos i zaktualizuj rankingi ELO.
-
-        Proces:
-        1. Waliduj sesję i głos
-        2. Zapisz wynik głosowania
-        3. Zaktualizuj rankingi ELO dla obu schematów
-        4. Zwróć zaktualizowaną sesję
+        agent_analyses: dict[str, str],
+        api_keys: dict | None,
+        team_config: dict
+    ) -> str:
+        """Wygeneruj podsumowanie dla zespołu.
 
         Args:
-            arena_session_id: ID sesji Arena
-            winner: Zwycięzca ("A", "B", "tie")
-            voter_id: ID użytkownika głosującego
-            comment: Opcjonalny komentarz
+            agent_analyses: Analizy od poszczególnych agentów
+            api_keys: Klucze API
+            team_config: Konfiguracja zespołu
 
         Returns:
-            Zaktualizowana ArenaSession
-
-        Raises:
-            ValueError: Jeśli sesja nie istnieje lub głos jest nieprawidłowy
+            str: Podsumowanie
         """
-        # Walidacja: czy sesja istnieje
-        arena_session = self.session.get(ArenaSession, arena_session_id)
-        if not arena_session:
-            raise ValueError(f"Arena session {arena_session_id} nie istnieje")
+        # Użyj modelu z roli "general" do podsumowania
+        config = team_config.get("general", {})
+        provider = config.get("provider", "ollama")
+        model = config.get("model", "qwen2.5-coder:latest")
 
-        # Walidacja: czy sesja jest completed
-        if arena_session.status != "completed":
-            raise ValueError(
-                f"Nie można głosować - sesja ma status '{arena_session.status}', "
-                f"wymagany 'completed'"
-            )
+        # Zbuduj prompt
+        analyses_text = "\n\n".join([
+            f"**{role.upper()}**:\n{analysis}"
+            for role, analysis in agent_analyses.items()
+        ])
 
-        # Walidacja: czy już zagłosowano
-        if arena_session.winner is not None:
-            raise ValueError(
-                f"W tej sesji już zagłosowano - zwycięzca: {arena_session.winner}"
-            )
+        prompt = self.SUMMARY_PROMPT.format(agent_analyses=analyses_text)
 
-        # Walidacja: czy winner jest prawidłowy
-        if winner not in ["A", "B", "tie"]:
-            raise ValueError(f"Winner musi być 'A', 'B' lub 'tie', otrzymano: {winner}")
+        messages = [
+            LLMMessage(role="system", content="Jesteś moderatorem code review."),
+            LLMMessage(role="user", content=prompt)
+        ]
 
-        logger.info(
-            f"Arena session {arena_session_id}: zapisuję głos - "
-            f"zwycięzca: {winner}, voter: {voter_id}"
-        )
+        api_key = api_keys.get(provider) if api_keys else None
 
-        # Zapisz wynik głosowania
-        arena_session.winner = winner
-        arena_session.vote_comment = comment
-        arena_session.voter_id = voter_id
-        arena_session.voted_at = datetime.now(timezone.utc)
-        self.session.add(arena_session)
-        self.session.commit()
-
-        # Zaktualizuj rankingi ELO
         try:
-            await self._update_schema_ratings(
-                schema_a_config=arena_session.schema_a_config,
-                schema_b_config=arena_session.schema_b_config,
-                winner=winner
+            response, _, _ = await provider_router.generate(
+                messages=messages,
+                provider_name=provider,
+                model=model,
+                temperature=0.3,
+                max_tokens=1024,
+                api_key=api_key
             )
-            logger.info(f"Arena session {arena_session_id}: rankingi ELO zaktualizowane")
-            cache.delete_prefix("arena:rankings")
-            cache.delete("arena:stats")
+            return response
         except Exception as e:
-            logger.error(
-                f"Arena session {arena_session_id}: "
-                f"nie udało się zaktualizować rankingów: {e}",
-                exc_info=True
-            )
-            # Nie failuj całego głosowania jeśli ELO nie działa
-
-        self.session.refresh(arena_session)
-        return arena_session
-
-    async def _update_schema_ratings(
-        self,
-        schema_a_config: dict,
-        schema_b_config: dict,
-        winner: str
-    ):
-        """Zaktualizuj rankingi ELO dla obu schematów.
-
-        Używa algorytmu ELO do obliczenia nowych ratingów na podstawie wyniku.
-        K-factor zależy od liczby rozegranych gier (nowe schematy mają wyższy K-factor).
-
-        Args:
-            schema_a_config: Konfiguracja Schematu A
-            schema_b_config: Konfiguracja Schematu B
-            winner: Zwycięzca ("A", "B", "tie")
-        """
-        # Generuj hash dla każdego schematu (identyfikacja)
-        hash_a = self._compute_schema_hash(schema_a_config)
-        hash_b = self._compute_schema_hash(schema_b_config)
-
-        logger.info(f"Aktualizuję rankingi ELO - Hash A: {hash_a[:8]}..., Hash B: {hash_b[:8]}...")
-
-        # Pobierz lub utwórz rating dla każdego schematu
-        rating_a = self._get_or_create_schema_rating(hash_a, schema_a_config)
-        rating_b = self._get_or_create_schema_rating(hash_b, schema_b_config)
-
-        logger.info(
-            f"ELO przed: A={rating_a.elo_rating:.0f}, B={rating_b.elo_rating:.0f}, "
-            f"Gry: A={rating_a.games_played}, B={rating_b.games_played}"
-        )
-
-        # Oblicz nowe ratingi
-        result_for_elo = f"candidate_{winner.lower()}"  # "candidate_a", "candidate_b", "tie"
-        new_rating_a, new_rating_b = elo_update(
-            rating_a=rating_a.elo_rating,
-            rating_b=rating_b.elo_rating,
-            result=result_for_elo,
-            games_played_a=rating_a.games_played,
-            games_played_b=rating_b.games_played
-        )
-
-        # Zaktualizuj rating A
-        rating_a.elo_rating = new_rating_a
-        rating_a.games_played += 1
-        if winner == "A":
-            rating_a.wins += 1
-        elif winner == "B":
-            rating_a.losses += 1
-        else:  # tie
-            rating_a.ties += 1
-        rating_a.updated_at = datetime.now(timezone.utc)
-        rating_a.last_used_at = datetime.now(timezone.utc)
-
-        # Zaktualizuj rating B
-        rating_b.elo_rating = new_rating_b
-        rating_b.games_played += 1
-        if winner == "B":
-            rating_b.wins += 1
-        elif winner == "A":
-            rating_b.losses += 1
-        else:  # tie
-            rating_b.ties += 1
-        rating_b.updated_at = datetime.now(timezone.utc)
-        rating_b.last_used_at = datetime.now(timezone.utc)
-
-        # Zapisz zmiany
-        self.session.add(rating_a)
-        self.session.add(rating_b)
-        self.session.commit()
-
-        logger.info(
-            f"ELO po: A={new_rating_a:.0f} ({rating_a.wins}W-{rating_a.losses}L-{rating_a.ties}T), "
-            f"B={new_rating_b:.0f} ({rating_b.wins}W-{rating_b.losses}L-{rating_b.ties}T)"
-        )
-
-    def _compute_schema_hash(self, schema_config: dict) -> str:
-        """Oblicz SHA-256 hash dla konfiguracji schematu.
-
-        Hash jest używany jako unikalny identyfikator schematu.
-        Posortowanie kluczy zapewnia, że identyczna konfiguracja
-        zawsze da ten sam hash.
-
-        Args:
-            schema_config: Konfiguracja schematu
-
-        Returns:
-            64-znakowy hash hex
-        """
-        # Posortuj klucze dla konsystencji
-        config_json = json.dumps(schema_config, sort_keys=True)
-        hash_obj = hashlib.sha256(config_json.encode())
-        return hash_obj.hexdigest()
-
-    def _get_or_create_schema_rating(
-        self,
-        schema_hash: str,
-        schema_config: dict
-    ) -> SchemaRating:
-        """Pobierz lub utwórz rating dla schematu.
-
-        Args:
-            schema_hash: Hash schematu (identyfikator)
-            schema_config: Pełna konfiguracja schematu
-
-        Returns:
-            SchemaRating (istniejący lub nowo utworzony)
-        """
-        # Sprawdź czy rating już istnieje
-        stmt = select(SchemaRating).where(SchemaRating.schema_hash == schema_hash)
-        rating = self.session.exec(stmt).first()
-
-        if rating:
-            logger.debug(f"Rating istnieje: hash={schema_hash[:8]}..., ELO={rating.elo_rating:.0f}")
-            return rating
-
-        # Utwórz nowy rating (start: 1500 ELO)
-        rating = SchemaRating(
-            schema_hash=schema_hash,
-            schema_config=schema_config,
-            elo_rating=1500.0,
-            games_played=0,
-            wins=0,
-            losses=0,
-            ties=0
-        )
-        self.session.add(rating)
-        self.session.commit()
-        self.session.refresh(rating)
-
-        logger.info(f"Utworzono nowy rating: hash={schema_hash[:8]}..., ELO=1500.0")
-
-        return rating
+            logger.warning(f"Summary generation failed: {e}")
+            return f"Podsumowanie niedostępne (błąd: {str(e)[:100]})"

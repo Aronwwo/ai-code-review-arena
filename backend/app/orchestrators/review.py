@@ -118,29 +118,25 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
         agent_configs: dict[str, AgentConfig] | None = None,
         moderator_config: dict | None = None
     ) -> Review:
-        """Przeprowadź code review używając wielu agentów.
+        """Przeprowadź code review używając wielu agentów AI.
 
-        Ta metoda jest uniwersalna i obsługuje oba tryby:
-        - COUNCIL MODE: Wywoływana bezpośrednio przez API dla współpracy agentów
-        - COMBAT ARENA: Wywoływana przez ArenaOrchestrator dla każdego review (A i B)
-
-        Dispatcher trybu:
-        - Sprawdza review_mode i waliduje wymagane pola
-        - Arena review MUSZĄ mieć arena_session_id (tworzone przez ArenaOrchestrator)
-        - Council review NIE MOGĄ mieć arena_session_id (tworzone bezpośrednio)
+        Obsługuje dwa tryby:
+        - COUNCIL: Agenci współpracują, dyskutują, moderator podsumowuje konsensus
+        - ARENA: Agenci debatują przeciwstawne stanowiska, moderator wydaje werdykt
 
         Args:
             review_id: ID review do przeprowadzenia
-            provider_name: Provider LLM do użycia
-            model: Nazwa modelu do użycia
-            api_keys: Słownik: nazwa providera -> klucz API
-            agent_configs: Konfiguracje per agent (mogą zawierać custom_provider)
+            provider_name: Provider LLM (opcjonalny fallback)
+            model: Nazwa modelu (opcjonalny fallback)
+            api_keys: Klucze API per provider: {provider_name: api_key}
+            agent_configs: Konfiguracja per agent: {role: AgentConfig}
+            moderator_config: Konfiguracja moderatora
 
         Returns:
-            Ukończony obiekt Review
+            Ukończony obiekt Review ze statusem 'completed' lub 'failed'
 
         Raises:
-            ValueError: Jeśli review nie istnieje lub walidacja trybu się nie powiodła
+            ValueError: Jeśli review nie istnieje lub ma nieprawidłowy tryb
         """
         # Pobierz review i projekt
         review = self.session.get(Review, review_id)
@@ -151,40 +147,13 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
         if not project:
             raise ValueError(f"Project {review.project_id} nie istnieje")
 
-        # === DISPATCHER TRYBU ===
-        # Walidacja i logowanie w zależności od review_mode
-        review_mode = review.review_mode or "council"  # Default to council dla starych review
+        # Ustalenie trybu review
+        review_mode = review.review_mode or "council"
 
-        if review_mode == "combat_arena":
-            # Arena review MUSI mieć arena_session_id (tworzone przez ArenaOrchestrator)
-            if not review.arena_session_id:
-                raise ValueError(
-                    f"Review {review_id} ma tryb 'combat_arena' ale brakuje arena_session_id. "
-                    f"Arena review muszą być tworzone przez ArenaOrchestrator, nie bezpośrednio."
-                )
-            logger.info(
-                f"Review {review_id}: tryb COMBAT ARENA, schemat {review.arena_schema_name}, "
-                f"sesja {review.arena_session_id}"
-            )
+        if review_mode not in ("council", "arena"):
+            raise ValueError(f"Nieznany tryb review: '{review_mode}'. Dozwolone: 'council', 'arena'")
 
-        elif review_mode == "council":
-            # Council review NIE MOŻE mieć arena_session_id
-            if review.arena_session_id:
-                raise ValueError(
-                    f"Review {review_id} ma tryb 'council' ale ma arena_session_id. "
-                    f"Council review nie mogą być częścią sesji Arena."
-                )
-            logger.info(f"Review {review_id}: tryb COUNCIL MODE")
-
-        else:
-            # Nieznany tryb
-            raise ValueError(
-                f"Review {review_id} ma nieznany review_mode: '{review_mode}'. "
-                f"Dozwolone: 'council', 'combat_arena'"
-            )
-
-        # === KONIEC DISPATCHERA ===
-        # Od tego momentu logika jest wspólna dla obu trybów
+        logger.info(f"Review {review_id}: tryb {review_mode.upper()}")
 
         # Update review status
         review.status = "running"
@@ -216,6 +185,7 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
                 )
 
             if review_mode == "council":
+                # Tryb Council: agenci współpracują, moderator podsumowuje
                 await self._run_council_review(
                     review=review,
                     project=project,
@@ -227,7 +197,8 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
                     api_keys=api_keys
                 )
             else:
-                # Run each agent with their configured provider/model (arena reviews)
+                # Tryb Arena: agenci analizują niezależnie
+                # TODO: Dodać logikę debaty między agentami
                 for agent in agents_list:
                     # Get agent config if available
                     agent_config = typed_agent_configs.get(agent.role) if typed_agent_configs else None

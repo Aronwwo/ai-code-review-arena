@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 # Importy z naszej aplikacji
 from app.config import settings  # Ustawienia z .env (klucze API, DB URL, etc.)
 from app.database import create_db_and_tables  # Funkcja inicjalizująca bazę danych
-from app.api import auth, projects, files, reviews, conversations, ollama, websocket, audit, evaluations, arena  # Wszystkie routery API
+from app.api import auth, projects, files, reviews, conversations, ollama, websocket, audit, rankings, arena  # Wszystkie routery API
 from app.utils.rate_limit import check_rate_limit  # Rate limiting (60 req/min)
 
 # ==================== LOGGING CONFIGURATION ====================
@@ -125,8 +125,8 @@ app.include_router(conversations.issues_router)  # /issues/{id}/conversations - 
 app.include_router(ollama.router)  # /ollama/* - komunikacja z Ollama (lista modeli)
 app.include_router(websocket.router)  # /ws/* - WebSocket dla real-time updates
 app.include_router(audit.router)  # /audit/* - logi audytowe (admin only)
-app.include_router(evaluations.router)  # /evaluations/* - Model Duel (porównania i rankingi)
-app.include_router(arena.router)  # /arena/* - Combat Arena (porównywanie pełnych schematów review)
+app.include_router(rankings.router)  # /rankings/* - rankingi na podstawie review
+app.include_router(arena.router)  # /arena/* - sesje Arena (walki zespołów) i głosowanie
 
 
 # ==================== HEALTH CHECK ENDPOINTS ====================

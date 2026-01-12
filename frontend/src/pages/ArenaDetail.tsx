@@ -1,44 +1,25 @@
-/**
- * ArenaDetail - Strona szczegółów sesji Combat Arena
- *
- * Pokazuje:
- * - Status sesji Arena (pending/running/completed/failed)
- * - Konfiguracje schematów A i B
- * - Szczegóły dwóch review (A i B)
- * - Porównanie wyników (liczba issues)
- * - Formularz głosowania (jeśli completed i nie zagłosowano)
- * - Wynik głosowania i ELO (jeśli zagłosowano)
- */
-
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { ArenaSession, Review, ArenaWinner } from '@/types';
+import { ArenaSession, ArenaVote, ArenaIssue } from '@/types';
 import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Textarea } from '@/components/ui/Textarea';
 import { Label } from '@/components/ui/Label';
-import {
-  ArrowLeft, Swords, Trophy, Clock, CheckCircle2, XCircle,
-  AlertCircle, Loader2, TrendingUp, FileCode
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Trophy, Users, AlertTriangle, CheckCircle, Info, Swords, ThumbsUp, ThumbsDown, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseApiError } from '@/lib/errorParser';
-import type { AgentConfig } from '@/types';
-import type { LucideIcon } from 'lucide-react';
 
 export function ArenaDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [selectedWinner, setSelectedWinner] = useState<ArenaWinner | null>(null);
-  const [comment, setComment] = useState('');
+  const [voteComment, setVoteComment] = useState('');
 
-  // Fetch Arena Session
-  const { data: session, isLoading: sessionLoading } = useQuery<ArenaSession>({
+  // Fetch arena session
+  const { data: session, isLoading, error } = useQuery<ArenaSession>({
     queryKey: ['arena-session', id],
     queryFn: async () => {
       const response = await api.get(`/arena/sessions/${id}`);
@@ -46,320 +27,373 @@ export function ArenaDetail() {
     },
     enabled: !!id,
     refetchInterval: (query) => {
+      // Poll while running
       const data = query.state.data;
-      return data?.status === 'running' || data?.status === 'pending' ? 3000 : false;
+      if (data?.status === 'running' || data?.status === 'pending') {
+        return 3000;
+      }
+      return false;
     },
   });
 
-  // Fetch Review A
-  const { data: reviewA, isLoading: loadingA } = useQuery<Review>({
-    queryKey: ['review', session?.review_a_id],
-    queryFn: async () => {
-      const response = await api.get(`/reviews/${session?.review_a_id}`);
-      return response.data;
-    },
-    enabled: !!session?.review_a_id,
-  });
-
-  // Fetch Review B
-  const { data: reviewB, isLoading: loadingB } = useQuery<Review>({
-    queryKey: ['review', session?.review_b_id],
-    queryFn: async () => {
-      const response = await api.get(`/reviews/${session?.review_b_id}`);
-      return response.data;
-    },
-    enabled: !!session?.review_b_id,
-  });
-
-  // Submit Vote Mutation
+  // Vote mutation
   const voteMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedWinner) throw new Error('Wybierz zwycięzcę');
-
-      const response = await api.post(`/arena/sessions/${id}/vote`, {
-        winner: selectedWinner,
-        comment: comment || undefined,
-      });
+    mutationFn: async (vote: ArenaVote) => {
+      const response = await api.post(`/arena/sessions/${id}/vote`, vote);
       return response.data;
     },
     onSuccess: () => {
-      toast.success('Głos zapisany! Rankingi ELO zaktualizowane.');
       queryClient.invalidateQueries({ queryKey: ['arena-session', id] });
-      queryClient.invalidateQueries({ queryKey: ['arena-rankings'] });
+      toast.success('Glos zapisany pomyslnie!');
     },
     onError: (error: unknown) => {
-      toast.error(parseApiError(error, 'Nie udało się zapisać głosu'));
+      toast.error(parseApiError(error, 'Nie udalo sie zaglosowac'));
     },
   });
 
-  if (sessionLoading) {
-    return (
-      <div className="container mx-auto p-6 max-w-7xl">
-        <Skeleton className="h-8 w-64 mb-6" />
-        <Skeleton className="h-96" />
-      </div>
-    );
-  }
+  const handleVote = (winner: 'A' | 'B' | 'tie') => {
+    voteMutation.mutate({
+      winner,
+      comment: voteComment || undefined,
+    });
+  };
 
-  if (!session) {
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'error':
+        return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case 'warning':
+        return <Info className="h-4 w-4 text-yellow-500" />;
+      default:
+        return <Info className="h-4 w-4 text-blue-500" />;
+    }
+  };
+
+  const getSeverityBadge = (severity: string) => {
+    switch (severity) {
+      case 'error':
+        return <Badge variant="destructive">error</Badge>;
+      case 'warning':
+        return <Badge variant="warning">warning</Badge>;
+      default:
+        return <Badge variant="secondary">info</Badge>;
+    }
+  };
+
+  const renderIssues = (issues: ArenaIssue[], teamName: string) => {
+    if (issues.length === 0) {
+      return (
+        <div className="text-center py-8 text-muted-foreground">
+          <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+          <p>Zespol {teamName} nie znalazl zadnych problemow</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="container mx-auto p-6 max-w-7xl">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center gap-4">
-              <AlertCircle className="h-12 w-12 text-muted-foreground" />
-              <p className="text-muted-foreground">Sesja Arena nie znaleziona</p>
-              <Button onClick={() => navigate('/projects')} variant="outline">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Powrót do projektów
-              </Button>
+      <div className="space-y-3">
+        {issues.map((issue, index) => (
+          <div key={index} className="border rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              {getSeverityIcon(issue.severity)}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium">{issue.title}</span>
+                  {getSeverityBadge(issue.severity)}
+                  <Badge variant="outline">{issue.category}</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{issue.description}</p>
+                {issue.file_name && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Plik: {issue.file_name}
+                    {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
+                  </p>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        ))}
       </div>
-    );
-  }
-
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'success'; icon: LucideIcon; label: string }> = {
-      pending: { variant: 'secondary', icon: Clock, label: 'Oczekuje' },
-      running: { variant: 'default', icon: Loader2, label: 'Uruchomione' },
-      completed: { variant: 'success', icon: CheckCircle2, label: 'Zakończone' },
-      failed: { variant: 'destructive', icon: XCircle, label: 'Błąd' },
-    };
-
-    const config = variants[status] || variants.pending;
-    const Icon = config.icon;
-
-    return (
-      <Badge variant={config.variant} className="gap-1">
-        <Icon className={`h-3 w-3 ${status === 'running' ? 'animate-spin' : ''}`} />
-        {config.label}
-      </Badge>
     );
   };
 
-  const canVote = session.status === 'completed' && !session.winner;
-  const hasVoted = !!session.winner;
-  const schemaAConfig = session.schema_a_config as Record<string, AgentConfig>;
-  const schemaBConfig = session.schema_b_config as Record<string, AgentConfig>;
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-32" />
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !session) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <h2 className="text-2xl font-bold mb-2">Sesja nie znaleziona</h2>
+        <p className="text-muted-foreground mb-4">Sesja Arena, ktorej szukasz, nie istnieje</p>
+        <Link to="/projects">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Powrot do Projektow
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const getStatusBadge = () => {
+    switch (session.status) {
+      case 'completed':
+        return <Badge variant="success">Zakonczona</Badge>;
+      case 'voting':
+        return <Badge variant="warning">Oczekuje na glos</Badge>;
+      case 'running':
+        return (
+          <Badge variant="default">
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            W trakcie
+          </Badge>
+        );
+      case 'failed':
+        return <Badge variant="destructive">Blad</Badge>;
+      default:
+        return <Badge variant="secondary">Oczekuje</Badge>;
+    }
+  };
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4" />
+      <div>
+        <Link to={`/projects/${session.project_id}`}>
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Powrot do Projektu
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <Swords className="h-6 w-6 text-orange-500" />
-              <h1 className="text-3xl font-bold">Combat Arena #{id}</h1>
-              {getStatusBadge(session.status)}
+        </Link>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Swords className="h-8 w-8 text-primary" />
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Arena #{session.id}</h1>
+              <p className="text-muted-foreground">
+                Utworzono: {new Date(session.created_at).toLocaleString()}
+              </p>
             </div>
-            <p className="text-muted-foreground mt-1">
-              Porównanie dwóch schematów review - Schema A vs Schema B
-            </p>
           </div>
+          {getStatusBadge()}
         </div>
       </div>
 
-      {/* Error Message */}
-      {session.error_message && (
-        <Card className="border-destructive">
+      {/* Status messages */}
+      {session.status === 'pending' && (
+        <Card className="bg-blue-500/10 border-blue-500/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+              <p>Sesja oczekuje na uruchomienie...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {session.status === 'running' && (
+        <Card className="bg-yellow-500/10 border-yellow-500/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
+              <p>Zespoly analizuja kod... To moze potrwac kilka minut.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {session.status === 'failed' && (
+        <Card className="bg-red-500/10 border-red-500/20">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+              <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
               <div>
-                <p className="font-medium text-destructive">Błąd podczas wykonywania Arena</p>
-                <p className="text-sm text-muted-foreground mt-1">{session.error_message}</p>
+                <p className="font-medium text-red-600">Wystapil blad podczas analizy</p>
+                {session.error_message && (
+                  <p className="text-sm text-muted-foreground mt-1">{session.error_message}</p>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Vote Result (if voted) */}
-      {hasVoted && (
-        <Card className="border-green-500/50 bg-green-500/5">
+      {/* Winner announcement (after voting) */}
+      {session.status === 'completed' && session.winner && (
+        <Card className="bg-green-500/10 border-green-500/20">
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Trophy className="h-8 w-8 text-yellow-500" />
-                <div>
-                  <p className="font-semibold text-lg">Zwycięzca: Schema {session.winner}</p>
-                  {session.vote_comment && (
-                    <p className="text-sm text-muted-foreground mt-1">{session.vote_comment}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Głosowano: {new Date(session.voted_at!).toLocaleString('pl-PL')}
+            <div className="flex items-center gap-3">
+              <Trophy className="h-6 w-6 text-yellow-500" />
+              <div>
+                <p className="font-medium text-green-600">
+                  {session.winner === 'tie'
+                    ? 'Wynik: Remis!'
+                    : `Zwyciezca: Zespol ${session.winner}!`}
+                </p>
+                {session.vote_comment && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Komentarz: {session.vote_comment}
                   </p>
-                </div>
+                )}
               </div>
-              <Button variant="outline" size="sm" onClick={() => navigate('/arena/rankings')}>
-                <TrendingUp className="mr-2 h-4 w-4" />
-                Zobacz Rankingi
-              </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Comparison Grid */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Schema A */}
-        <Card className={hasVoted && session.winner === 'A' ? 'border-green-500' : ''}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                Schema A
-                {hasVoted && session.winner === 'A' && (
-                  <Trophy className="h-5 w-5 text-yellow-500" />
+      {/* Results grid */}
+      {(session.status === 'voting' || session.status === 'completed') && (
+        <>
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Team A */}
+            <Card className={`${session.winner === 'A' ? 'ring-2 ring-green-500' : ''}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-blue-500" />
+                    <CardTitle>Zespol A</CardTitle>
+                    {session.winner === 'A' && (
+                      <Trophy className="h-5 w-5 text-yellow-500" />
+                    )}
+                  </div>
+                  <Badge variant="outline">
+                    {session.team_a_issues?.length || 0} problemow
+                  </Badge>
+                </div>
+                <CardDescription>
+                  {Object.entries(session.team_a_config || {}).map(([role, config]) => (
+                    <span key={role} className="mr-2">
+                      {role}: {(config as { model?: string })?.model || 'N/A'}
+                    </span>
+                  ))}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {session.team_a_summary && (
+                  <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium mb-2">Podsumowanie</p>
+                    <p className="text-sm whitespace-pre-wrap">{session.team_a_summary}</p>
+                  </div>
                 )}
-              </CardTitle>
-              {reviewA && (
-                <Badge variant={reviewA.status === 'completed' ? 'success' : 'default'}>
-                  {reviewA.issue_count} issues
-                </Badge>
-              )}
-            </div>
-            <CardDescription>
-              {loadingA ? 'Ładowanie...' : `Review #${session.review_a_id}`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {Object.entries(schemaAConfig).map(([role, config]) => (
-              <div key={role} className="flex items-center justify-between text-sm">
-                <span className="font-medium capitalize">{role}:</span>
-                <span className="text-muted-foreground">
-                  {config.provider} / {config.model}
-                </span>
-              </div>
-            ))}
-            {reviewA && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full mt-4"
-                onClick={() => navigate(`/reviews/${session.review_a_id}`)}
-              >
-                <FileCode className="mr-2 h-4 w-4" />
-                Zobacz Review A
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+                <div>
+                  <p className="text-sm font-medium mb-3">Znalezione problemy</p>
+                  {renderIssues(session.team_a_issues || [], 'A')}
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Schema B */}
-        <Card className={hasVoted && session.winner === 'B' ? 'border-green-500' : ''}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                Schema B
-                {hasVoted && session.winner === 'B' && (
-                  <Trophy className="h-5 w-5 text-yellow-500" />
+            {/* Team B */}
+            <Card className={`${session.winner === 'B' ? 'ring-2 ring-green-500' : ''}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-red-500" />
+                    <CardTitle>Zespol B</CardTitle>
+                    {session.winner === 'B' && (
+                      <Trophy className="h-5 w-5 text-yellow-500" />
+                    )}
+                  </div>
+                  <Badge variant="outline">
+                    {session.team_b_issues?.length || 0} problemow
+                  </Badge>
+                </div>
+                <CardDescription>
+                  {Object.entries(session.team_b_config || {}).map(([role, config]) => (
+                    <span key={role} className="mr-2">
+                      {role}: {(config as { model?: string })?.model || 'N/A'}
+                    </span>
+                  ))}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {session.team_b_summary && (
+                  <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm font-medium mb-2">Podsumowanie</p>
+                    <p className="text-sm whitespace-pre-wrap">{session.team_b_summary}</p>
+                  </div>
                 )}
-              </CardTitle>
-              {reviewB && (
-                <Badge variant={reviewB.status === 'completed' ? 'success' : 'default'}>
-                  {reviewB.issue_count} issues
-                </Badge>
-              )}
-            </div>
-            <CardDescription>
-              {loadingB ? 'Ładowanie...' : `Review #${session.review_b_id}`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {Object.entries(schemaBConfig).map(([role, config]) => (
-              <div key={role} className="flex items-center justify-between text-sm">
-                <span className="font-medium capitalize">{role}:</span>
-                <span className="text-muted-foreground">
-                  {config.provider} / {config.model}
-                </span>
-              </div>
-            ))}
-            {reviewB && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full mt-4"
-                onClick={() => navigate(`/reviews/${session.review_b_id}`)}
-              >
-                <FileCode className="mr-2 h-4 w-4" />
-                Zobacz Review B
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                <div>
+                  <p className="text-sm font-medium mb-3">Znalezione problemy</p>
+                  {renderIssues(session.team_b_issues || [], 'B')}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Voting Section */}
-      {canVote && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Głosowanie</CardTitle>
-            <CardDescription>
-              Który schemat był lepszy? Twój głos zaktualizuje rankingi ELO.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-3">
-              <Button
-                variant={selectedWinner === 'A' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setSelectedWinner('A')}
-              >
-                Schema A
-              </Button>
-              <Button
-                variant={selectedWinner === 'tie' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setSelectedWinner('tie')}
-              >
-                Remis
-              </Button>
-              <Button
-                variant={selectedWinner === 'B' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setSelectedWinner('B')}
-              >
-                Schema B
-              </Button>
-            </div>
-
-            <div>
-              <Label htmlFor="comment">Komentarz (opcjonalnie)</Label>
-              <Textarea
-                id="comment"
-                placeholder="Dlaczego ten schemat jest lepszy?"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows={3}
-                className="mt-1.5"
-              />
-            </div>
-
-            <Button
-              onClick={() => voteMutation.mutate()}
-              disabled={!selectedWinner || voteMutation.isPending}
-              className="w-full"
-            >
-              {voteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Zapisywanie...
-                </>
-              ) : (
-                <>
-                  <Trophy className="mr-2 h-4 w-4" />
-                  Zapisz Głos
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+          {/* Voting section */}
+          {session.status === 'voting' && !session.winner && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Scale className="h-5 w-5" />
+                  Zaglosuj na zwyciezce
+                </CardTitle>
+                <CardDescription>
+                  Ktory zespol dal lepsze wyniki analizy kodu? Twoj glos wplywa na ranking ELO zespolow.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Komentarz (opcjonalnie)</Label>
+                  <Textarea
+                    placeholder="Dlaczego wybrales ten zespol?"
+                    value={voteComment}
+                    onChange={(e) => setVoteComment(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <div className="flex gap-4 justify-center">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 max-w-xs border-blue-500 hover:bg-blue-500/10"
+                    onClick={() => handleVote('A')}
+                    disabled={voteMutation.isPending}
+                  >
+                    <ThumbsUp className="mr-2 h-5 w-5 text-blue-500" />
+                    Zespol A wygrywa
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 max-w-xs"
+                    onClick={() => handleVote('tie')}
+                    disabled={voteMutation.isPending}
+                  >
+                    <Scale className="mr-2 h-5 w-5" />
+                    Remis
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 max-w-xs border-red-500 hover:bg-red-500/10"
+                    onClick={() => handleVote('B')}
+                    disabled={voteMutation.isPending}
+                  >
+                    <ThumbsDown className="mr-2 h-5 w-5 text-red-500" />
+                    Zespol B wygrywa
+                  </Button>
+                </div>
+                {voteMutation.isPending && (
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Zapisywanie glosu...</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

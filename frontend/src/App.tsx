@@ -18,11 +18,8 @@ const Projects = lazy(() => import('@/pages/Projects').then(m => ({ default: m.P
 const ProjectDetail = lazy(() => import('@/pages/ProjectDetail').then(m => ({ default: m.ProjectDetail })));
 const ReviewDetail = lazy(() => import('@/pages/ReviewDetail').then(m => ({ default: m.ReviewDetail })));
 const Settings = lazy(() => import('@/pages/Settings').then(m => ({ default: m.Settings })));
-const ModelDuelSetup = lazy(() => import('@/pages/ModelDuelSetup').then(m => ({ default: m.ModelDuelSetup })));
-const ModelDuelCompare = lazy(() => import('@/pages/ModelDuelCompare').then(m => ({ default: m.ModelDuelCompare })));
 const Rankings = lazy(() => import('@/pages/Rankings').then(m => ({ default: m.Rankings })));
 const ArenaDetail = lazy(() => import('@/pages/ArenaDetail').then(m => ({ default: m.ArenaDetail })));
-const ArenaRankings = lazy(() => import('@/pages/ArenaRankings').then(m => ({ default: m.ArenaRankings })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,11 +79,8 @@ function AppRoutes() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="reviews/:id" element={<ReviewDetail />} />
-          <Route path="model-duel/setup" element={<ModelDuelSetup />} />
-          <Route path="model-duel/:sessionId" element={<ModelDuelCompare />} />
+          <Route path="arena/:id" element={<ArenaDetail />} />
           <Route path="rankings" element={<Rankings />} />
-          <Route path="arena/sessions/:id" element={<ArenaDetail />} />
-          <Route path="arena/rankings" element={<ArenaRankings />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

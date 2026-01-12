@@ -26,6 +26,7 @@ from app.models.file import File  # noqa: F401 - Tabela: files
 from app.models.review import Review, ReviewAgent, Issue, Suggestion  # noqa: F401 - Tabele: reviews, review_agents, issues, suggestions
 from app.models.conversation import Conversation, Message  # noqa: F401 - Tabele: conversations, messages
 from app.models.audit import AuditLog  # noqa: F401 - Tabela: audit_logs
+from app.models.arena import ArenaSession, TeamRating  # noqa: F401 - Tabele: arena_sessions, team_ratings
 
 # ==================== DATABASE ENGINE ====================
 # Engine - globalna instancja połączenia z bazą danych

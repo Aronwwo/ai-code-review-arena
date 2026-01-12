@@ -1,197 +1,136 @@
-"""Modele dla Combat Arena - porównywanie pełnych schematów review.
+"""Arena session models - system walki dwóch zespołów AI.
 
-Combat Arena pozwala użytkownikowi porównać dwa kompletne schematy konfiguracji review
-(Schemat A vs Schemat B), gdzie każdy schemat ma pełną konfigurację dla wszystkich 4 ról:
-- general (ogólna jakość kodu)
-- security (bezpieczeństwo)
-- performance (wydajność)
-- style (styl i konwencje)
-
-System ocenia który schemat jest lepszy i aktualizuje rankingi ELO.
+Arena to tryb porównywania dwóch konfiguracji zespołów:
+- Zespół A: 4 agentów (general, security, performance, style) z wybranymi modelami
+- Zespół B: 4 agentów z innymi modelami
+- Oba zespoły analizują ten sam kod
+- Użytkownik głosuje który zespół dał lepszą odpowiedź
+- Na podstawie głosów budowany jest ranking
 """
-from __future__ import annotations
-
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
-from sqlalchemy import ForeignKey, Integer
 
-if TYPE_CHECKING:
-    from app.models.user import User
-    from app.models.project import Project
-    from app.models.review import Review
-
-# Typy dla walidacji
-ArenaStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
+# Typy
+ArenaStatus = Literal["pending", "running", "voting", "completed", "failed"]
 ArenaWinner = Literal["A", "B", "tie"]
 
 
 class ArenaSession(SQLModel, table=True):
-    """Sesja Arena porównująca dwie pełne konfiguracje review.
+    """Sesja Arena - pojedyncza walka między dwoma zespołami.
 
-    Arena Session tworzy dwa osobne review (A i B), każdy z pełną konfiguracją
-    dla wszystkich 4 ról. Po zakończeniu użytkownik głosuje który lepszy,
-    a wyniki trafiają do rankingów ELO.
+    Przepływ:
+    1. pending - sesja utworzona, czeka na uruchomienie
+    2. running - oba zespoły analizują kod
+    3. voting - analiza zakończona, czeka na głos użytkownika
+    4. completed - użytkownik zagłosował
+    5. failed - błąd podczas analizy
     """
-
     __tablename__ = "arena_sessions"
 
-    # Podstawowe pola
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="projects.id", index=True)
     created_by: int = Field(foreign_key="users.id", index=True)
-    status: str = Field(default="pending", index=True)  # pending, running, completed, failed
 
-    # Konfiguracje schematów (JSON)
-    # Struktura: {"general": {"provider": "groq", "model": "...", ...}, "security": {...}, ...}
-    schema_a_config: dict = Field(sa_column=Column(JSON), description="Pełna konfiguracja Schematu A")
-    schema_b_config: dict = Field(sa_column=Column(JSON), description="Pełna konfiguracja Schematu B")
+    # Status sesji
+    status: str = Field(default="pending", index=True)
+    error_message: str | None = Field(default=None, max_length=2000)
 
-    # ID review utworzonych dla każdego schematu
-    review_a_id: int | None = Field(
-        default=None,
-        sa_column=Column(
-            Integer,
-            ForeignKey("reviews.id", use_alter=True, name="fk_arena_review_a"),
-            index=True
-        )
-    )
-    review_b_id: int | None = Field(
-        default=None,
-        sa_column=Column(
-            Integer,
-            ForeignKey("reviews.id", use_alter=True, name="fk_arena_review_b"),
-            index=True
-        )
-    )
+    # Konfiguracje zespołów (JSON z konfiguracją dla każdej roli)
+    # Format: {"general": {"provider": "ollama", "model": "qwen2.5"}, "security": {...}, ...}
+    team_a_config: dict = Field(default={}, sa_column=Column(JSON))
+    team_b_config: dict = Field(default={}, sa_column=Column(JSON))
 
-    # Wynik głosowania
-    winner: str | None = None  # "A", "B", "tie"
+    # Wyniki zespołów (JSON z podsumowaniem od moderatora)
+    team_a_summary: str | None = Field(default=None, max_length=10000)
+    team_b_summary: str | None = Field(default=None, max_length=10000)
+
+    # Szczegółowe wyniki (issues znalezione przez każdy zespół)
+    team_a_issues: list = Field(default=[], sa_column=Column(JSON))
+    team_b_issues: list = Field(default=[], sa_column=Column(JSON))
+
+    # Głosowanie użytkownika
+    winner: str | None = Field(default=None, max_length=10)  # "A", "B" lub "tie"
     vote_comment: str | None = Field(default=None, max_length=2000)
-    voter_id: int | None = Field(default=None, foreign_key="users.id")
     voted_at: datetime | None = None
 
-    # Metadane
-    error_message: str | None = Field(default=None, max_length=2000)
+    # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
-    # Relationships
-    # Trzeba określić foreign_keys dla wielokrotnych relacji do User
-    project: Project = Relationship()
-    created_by_user: User = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.created_by]"}
-    )
-    voter: User = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.voter_id]"}
-    )
-    # Relacje do Review - również trzeba określić foreign_keys
-    review_a: Review = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.review_a_id]"}
-    )
-    review_b: Review = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[ArenaSession.review_b_id]"}
-    )
 
+class TeamRating(SQLModel, table=True):
+    """Ranking konfiguracji zespołu na podstawie głosów w Arena.
 
-class SchemaRating(SQLModel, table=True):
-    """Ranking ELO dla pełnych schematów konfiguracji review.
-
-    Przechowuje rating dla konkretnej kombinacji konfiguracji wszystkich 4 ról.
-    Schemat identyfikowany przez hash konfiguracji.
+    Każda unikalna konfiguracja (hash 4 modeli) ma swój rating.
+    Rating jest obliczany metodą ELO na podstawie wyników walk.
     """
-
-    __tablename__ = "schema_ratings"
+    __tablename__ = "team_ratings"
 
     id: int | None = Field(default=None, primary_key=True)
 
-    # Identyfikator schematu (SHA-256 hash posortowanej konfiguracji JSON)
-    schema_hash: str = Field(max_length=64, unique=True, index=True)
-    schema_config: dict = Field(sa_column=Column(JSON), description="Pełna konfiguracja schematu")
+    # Hash konfiguracji (SHA-256 z JSON config)
+    config_hash: str = Field(max_length=64, unique=True, index=True)
 
-    # Ranking ELO (start: 1500)
-    elo_rating: float = Field(default=1500.0, description="Aktualny rating ELO")
-    games_played: int = Field(default=0, description="Liczba rozegranych pojedynków")
-    wins: int = Field(default=0, description="Liczba wygranych")
-    losses: int = Field(default=0, description="Liczba przegranych")
-    ties: int = Field(default=0, description="Liczba remisów")
+    # Konfiguracja zespołu (dla wyświetlania)
+    config: dict = Field(default={}, sa_column=Column(JSON))
 
-    # Statystyki (opcjonalne)
-    avg_issues_found: float | None = None  # Średnia liczba znalezionych issues
-    last_used_at: datetime | None = None  # Kiedy ostatnio użyty
+    # Statystyki ELO
+    elo_rating: float = Field(default=1500.0)
+    games_played: int = Field(default=0)
+    wins: int = Field(default=0)
+    losses: int = Field(default=0)
+    ties: int = Field(default=0)
 
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# ==================== API Schemas ====================
+# === API Schemas ===
 
 class ArenaSessionCreate(SQLModel):
     """Schema do tworzenia nowej sesji Arena."""
-
-    project_id: int = Field(description="ID projektu do przeanalizowania")
-
-    # Schemat A - pełna konfiguracja wszystkich 4 ról
-    schema_a_config: dict[str, dict] = Field(
-        description="Konfiguracja Schematu A. Klucze: general, security, performance, style"
-    )
-
-    # Schemat B - pełna konfiguracja wszystkich 4 ról
-    schema_b_config: dict[str, dict] = Field(
-        description="Konfiguracja Schematu B. Klucze: general, security, performance, style"
-    )
-
-    # API keys dla providerów (opcjonalne)
-    api_keys: dict[str, str] | None = Field(
-        default=None,
-        description="Klucze API dla providerów (np. {'openai': 'sk-...', 'anthropic': 'sk-ant-...'})"
-    )
-
-
-class ArenaVoteCreate(SQLModel):
-    """Schema do głosowania w sesji Arena."""
-
-    winner: ArenaWinner = Field(description="Zwycięzca: A, B lub tie (remis)")
-    comment: str | None = Field(
-        default=None,
-        max_length=2000,
-        description="Opcjonalny komentarz (dlaczego ten schemat jest lepszy?)"
-    )
+    project_id: int
+    team_a_config: dict  # {"general": {"provider": "...", "model": "..."}, ...}
+    team_b_config: dict
+    api_keys: dict | None = None
 
 
 class ArenaSessionRead(SQLModel):
-    """Schema odpowiedzi z danymi sesji Arena."""
-
+    """Schema odpowiedzi dla sesji Arena."""
     id: int
     project_id: int
     created_by: int
-    status: ArenaStatus
-    schema_a_config: dict
-    schema_b_config: dict
-    review_a_id: int | None
-    review_b_id: int | None
-    winner: ArenaWinner | None
-    vote_comment: str | None
-    voter_id: int | None
-    voted_at: datetime | None
+    status: str
     error_message: str | None
+    team_a_config: dict
+    team_b_config: dict
+    team_a_summary: str | None
+    team_b_summary: str | None
+    team_a_issues: list
+    team_b_issues: list
+    winner: str | None
+    vote_comment: str | None
+    voted_at: datetime | None
     created_at: datetime
     completed_at: datetime | None
 
 
-class SchemaRatingRead(SQLModel):
-    """Schema odpowiedzi z rankingiem schematu."""
+class ArenaVoteCreate(SQLModel):
+    """Schema do głosowania w sesji Arena."""
+    winner: ArenaWinner  # "A", "B" lub "tie"
+    comment: str | None = None
 
+
+class TeamRatingRead(SQLModel):
+    """Schema odpowiedzi dla rankingu zespołu."""
     id: int
-    schema_hash: str
-    schema_config: dict
+    config_hash: str
+    config: dict
     elo_rating: float
     games_played: int
     wins: int
     losses: int
     ties: int
-    avg_issues_found: float | None
-    last_used_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
+    win_rate: float = 0.0

@@ -70,10 +70,8 @@ async def create_review(
     """Utwórz i uruchom nowy review dla projektu.
 
     Wspiera dwa tryby:
-    1. COUNCIL MODE (domyślny): Agenci współpracują nad jednym review
-       - Podaj agent_roles i opcjonalnie agent_configs
-    2. COMBAT ARENA: Porównanie dwóch pełnych schematów (A vs B)
-       - Nie używaj tego endpoint! Użyj POST /arena/sessions zamiast tego
+    - COUNCIL: Agenci współpracują, dyskutują, moderator podsumowuje konsensus
+    - ARENA: Agenci debatują przeciwstawne stanowiska, moderator wydaje werdykt
 
     Args:
         project_id: ID projektu do przeanalizowania
@@ -86,56 +84,46 @@ async def create_review(
         Utworzony Review (status: "pending")
 
     Raises:
-        HTTPException 400: Jeśli tryb Arena użyty bezpośrednio
-        HTTPException 404: Jeśli projekt nie istnieje
+        HTTPException 400: Nieprawidłowy tryb review
+        HTTPException 404: Projekt nie istnieje
+        HTTPException 422: Brak wymaganej konfiguracji
     """
     project = await verify_project_access(project_id, current_user, session)
 
-    # === WALIDACJA TRYBU ===
-    # Arena review MUSZĄ być tworzone przez POST /arena/sessions, nie bezpośrednio
+    # Walidacja trybu review
     review_mode = review_data.review_mode
-
-    if review_mode == "combat_arena":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "Combat Arena nie może być utworzone bezpośrednio przez ten endpoint",
-                "hint": "Użyj POST /arena/sessions aby utworzyć sesję Arena",
-                "provided_mode": review_mode
-            }
-        )
-    if review_mode != "council":
+    if review_mode not in ("council", "arena"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": "Nieprawidłowy tryb review",
-                "allowed": ["council"],
-                "provided_mode": review_mode
+                "allowed": ["council", "arena"],
+                "provided": review_mode
             }
         )
 
-    # === TWORZENIE COUNCIL REVIEW ===
+    # Tworzenie review
     moderator_type = review_data.moderator_type
 
     if not review_data.agent_configs:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="agent_configs jest wymagane dla trybu council"
+            detail="agent_configs jest wymagane"
         )
 
     if not review_data.moderator_config:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="moderator_config jest wymagane dla trybu council"
+            detail="moderator_config jest wymagane"
         )
-    # Prompts are fixed server-side; ignore any client-provided prompts.
 
+    # Tworzenie rekordu Review w bazie
     review = Review(
         project_id=project_id,
         created_by=current_user.id,
         status="pending",
-        review_mode=review_mode,  # "council"
-        moderator_type=moderator_type  # "debate", "consensus", or "strategic"
+        review_mode=review_mode,
+        moderator_type=moderator_type
     )
     session.add(review)
     session.commit()

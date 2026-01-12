@@ -12,21 +12,28 @@ import sqlmodel
 
 # revision identifiers, used by Alembic.
 revision = '66a463fd1f4b'
-down_revision = 'b7c8d9e0f1a2'
+down_revision = '9f836e3c48f0'
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Add moderator_type column to reviews table
+    # Add review_mode and moderator_type columns to reviews table
     with op.batch_alter_table('reviews', schema=None) as batch_op:
+        batch_op.add_column(
+            sa.Column('review_mode', sqlmodel.sql.sqltypes.AutoString(length=20),
+                     nullable=False, server_default='council')
+        )
         batch_op.add_column(
             sa.Column('moderator_type', sqlmodel.sql.sqltypes.AutoString(length=20),
                      nullable=False, server_default='debate')
         )
+        batch_op.create_index('ix_reviews_review_mode', ['review_mode'], unique=False)
 
 
 def downgrade() -> None:
-    # Remove moderator_type column from reviews table
+    # Remove review_mode and moderator_type columns from reviews table
     with op.batch_alter_table('reviews', schema=None) as batch_op:
+        batch_op.drop_index('ix_reviews_review_mode')
         batch_op.drop_column('moderator_type')
+        batch_op.drop_column('review_mode')
