@@ -362,19 +362,6 @@ export function ReviewConfigDialog({
     );
   };
 
-  // Determine which tabs to show based on mode
-  const getTabsList = () => {
-    if (!config.mode) {
-      return ['mode'];
-    }
-    if (config.mode === 'council') {
-      return ['mode', 'agents', 'moderator'];
-    }
-    // Arena mode - two teams
-    return ['mode', 'teamA', 'teamB', 'moderator'];
-  };
-
-  const tabs = getTabsList();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -407,7 +394,7 @@ export function ReviewConfigDialog({
         )}
 
         <Tabs defaultValue="mode" className="mt-4">
-          <TabsList className={`grid w-full grid-cols-${tabs.length}`}>
+          <TabsList className={`grid w-full ${!config.mode ? 'grid-cols-1' : config.mode === 'council' ? 'grid-cols-3' : 'grid-cols-4'}`}>
             <TabsTrigger value="mode">Tryb</TabsTrigger>
             {config.mode === 'council' && (
               <>
@@ -417,8 +404,8 @@ export function ReviewConfigDialog({
             )}
             {config.mode === 'arena' && (
               <>
-                <TabsTrigger value="teamA" className="text-blue-600">Zespół A</TabsTrigger>
-                <TabsTrigger value="teamB" className="text-red-600">Zespół B</TabsTrigger>
+                <TabsTrigger value="teamA">Zespół A</TabsTrigger>
+                <TabsTrigger value="teamB">Zespół B</TabsTrigger>
                 <TabsTrigger value="moderator">Moderator</TabsTrigger>
               </>
             )}
