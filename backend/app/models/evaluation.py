@@ -1,7 +1,7 @@
 """Model Duel evaluation models."""
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
 
@@ -28,7 +28,7 @@ class EvaluationSession(SQLModel, table=True):
     num_rounds: int = Field(default=5)
     current_round: int = Field(default=0)
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
     # Relationships
@@ -63,7 +63,7 @@ class EvaluationCandidate(SQLModel, table=True):
     raw_output: str | None = Field(default=None, max_length=50_000)
     parsed_successfully: bool = Field(default=False)
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     session: EvaluationSession = Relationship(back_populates="candidates")
@@ -84,7 +84,7 @@ class EvaluationVote(SQLModel, table=True):
 
     # Voter info
     voter_id: int = Field(foreign_key="users.id", index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     session: EvaluationSession = Relationship(back_populates="votes")
@@ -111,8 +111,8 @@ class RatingConfig(SQLModel, table=True):
     ties: int = Field(default=0)
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class RatingModel(SQLModel, table=True):
@@ -134,8 +134,8 @@ class RatingModel(SQLModel, table=True):
     ties: int = Field(default=0)
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # API Schemas

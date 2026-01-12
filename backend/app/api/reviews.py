@@ -405,8 +405,8 @@ async def update_issue(
     for field, value in update_data.items():
         setattr(issue, field, value)
 
-    from datetime import datetime, UTC
-    issue.updated_at = datetime.now(UTC)
+    from datetime import datetime, timezone
+    issue.updated_at = datetime.now(timezone.utc)
 
     session.add(issue)
     session.commit()

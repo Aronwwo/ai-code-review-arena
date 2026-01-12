@@ -98,7 +98,7 @@ export function ArenaSetupDialog({
     queryKey: ['ollama-models'],
     queryFn: async () => {
       try {
-        const response = await api.get('/api/ollama/models');
+        const response = await api.get('/ollama/models');
         return response.data;
       } catch {
         return { models: [], cached: false };
@@ -170,7 +170,7 @@ export function ArenaSetupDialog({
 
     try {
       // Utwórz sesję Arena
-      const response = await api.post('/api/arena/sessions', {
+      const response = await api.post('/arena/sessions', {
         project_id: projectId,
         schema_a_config: config.schema_a,
         schema_b_config: config.schema_b,

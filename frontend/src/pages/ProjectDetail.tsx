@@ -192,7 +192,7 @@ export function ProjectDetail() {
       if (!provider) return undefined;
 
       // Only include custom_provider for non-built-in or custom providers
-      if (providerId.startsWith('custom-') || !provider.isBuiltIn) {
+      if ((providerId.startsWith('custom-') || !provider.isBuiltIn) && provider.baseUrl) {
         return {
           id: provider.id,
           name: provider.name,

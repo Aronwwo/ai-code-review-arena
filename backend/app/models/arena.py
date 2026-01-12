@@ -11,7 +11,7 @@ System ocenia który schemat jest lepszy i aktualizuje rankingi ELO.
 """
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
 from sqlalchemy import ForeignKey, Integer
@@ -73,7 +73,7 @@ class ArenaSession(SQLModel, table=True):
 
     # Metadane
     error_message: str | None = Field(default=None, max_length=2000)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
     # Relationships
@@ -121,8 +121,8 @@ class SchemaRating(SQLModel, table=True):
     last_used_at: datetime | None = None  # Kiedy ostatnio użyty
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ==================== API Schemas ====================

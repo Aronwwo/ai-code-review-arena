@@ -121,8 +121,8 @@ async def create_file(
     session.refresh(file)
 
     # Update project timestamp
-    from datetime import datetime, UTC
-    project.updated_at = datetime.now(UTC)
+    from datetime import datetime, timezone
+    project.updated_at = datetime.now(timezone.utc)
     session.add(project)
     session.commit()
 
@@ -210,9 +210,9 @@ async def update_file(
         if field != "content":
             setattr(file, field, value)
 
-    from datetime import datetime, UTC
-    file.updated_at = datetime.now(UTC)
-    project.updated_at = datetime.now(UTC)
+    from datetime import datetime, timezone
+    file.updated_at = datetime.now(timezone.utc)
+    project.updated_at = datetime.now(timezone.utc)
 
     session.add(file)
     session.add(project)
@@ -300,8 +300,8 @@ async def delete_file(
     session.delete(file)
 
     # Update project timestamp
-    from datetime import datetime, UTC
-    project.updated_at = datetime.now(UTC)
+    from datetime import datetime, timezone
+    project.updated_at = datetime.now(timezone.utc)
     session.add(project)
 
     session.commit()

@@ -1,7 +1,7 @@
 """Review, Issue, and Suggestion models."""
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
 
@@ -35,7 +35,7 @@ class Review(SQLModel, table=True):
     project_id: int = Field(foreign_key="projects.id", index=True)
     status: str = Field(default="pending", index=True)
     created_by: int = Field(foreign_key="users.id", index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
     error_message: str | None = Field(default=None, max_length=2000)
 
@@ -85,7 +85,7 @@ class ReviewAgent(SQLModel, table=True):
     model: str = Field(max_length=100)
     raw_output: str | None = Field(default=None, max_length=50_000)
     parsed_successfully: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     review: Review = Relationship(back_populates="agents")
@@ -116,8 +116,8 @@ class Issue(SQLModel, table=True):
     final_severity: str | None = None  # Updated by arena
     moderator_comment: str | None = Field(default=None, max_length=2000)
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     review: Review = Relationship(back_populates="issues")
@@ -134,7 +134,7 @@ class Suggestion(SQLModel, table=True):
     issue_id: int = Field(foreign_key="issues.id", index=True)
     suggested_code: str | None = Field(default=None, max_length=10_000)
     explanation: str = Field(max_length=2000)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     issue: Issue = Relationship(back_populates="suggestions")

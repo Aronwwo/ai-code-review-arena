@@ -1,7 +1,7 @@
 """Conversation and Message models for agent discussions."""
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 from sqlmodel import Field, Relationship, SQLModel, Column, JSON
 
@@ -28,7 +28,7 @@ class Conversation(SQLModel, table=True):
     status: str = Field(default="pending", index=True)
     summary: str | None = Field(default=None, max_length=10_000)
     meta_info: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
     # Relationships
@@ -49,7 +49,7 @@ class Message(SQLModel, table=True):
     content: str = Field(max_length=20_000)
     is_summary: bool = Field(default=False)  # True for moderator summary messages
     meta_info: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     conversation: Conversation = Relationship(back_populates="messages")

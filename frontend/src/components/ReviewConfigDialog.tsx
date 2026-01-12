@@ -110,7 +110,7 @@ export function ReviewConfigDialog({
     queryKey: ['ollama-models'],
     queryFn: async () => {
       try {
-        const response = await api.get('/api/ollama/models');
+        const response = await api.get('/ollama/models');
         return response.data;
       } catch {
         return { models: [], cached: false };

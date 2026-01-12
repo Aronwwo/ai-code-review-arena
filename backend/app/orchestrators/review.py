@@ -2,7 +2,7 @@
 import json
 import hashlib
 import logging
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlmodel import Session, select, func
 from pydantic import BaseModel, ValidationError
 from app.models.project import Project
@@ -261,7 +261,7 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
 
             # Mark review as completed
             review.status = "completed"
-            review.completed_at = datetime.now(UTC)
+            review.completed_at = datetime.now(timezone.utc)
 
             # Get total issue count and send completed event
             issue_count_stmt = select(func.count(Issue.id)).where(Issue.review_id == review_id)
@@ -272,7 +272,7 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
             # Mark review as failed
             review.status = "failed"
             review.error_message = str(e)[:2000]
-            review.completed_at = datetime.now(UTC)
+            review.completed_at = datetime.now(timezone.utc)
 
             # Send failed event
             await ws_manager.send_review_failed(review_id, str(e)[:500])
@@ -418,11 +418,11 @@ WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o s
                 api_keys=api_keys
             )
             conversation.status = "completed"
-            conversation.completed_at = datetime.now(UTC)
+            conversation.completed_at = datetime.now(timezone.utc)
         except Exception as e:
             conversation.status = "failed"
             conversation.meta_info = {"error": str(e)}
-            conversation.completed_at = datetime.now(UTC)
+            conversation.completed_at = datetime.now(timezone.utc)
             self.session.add(conversation)
             self.session.commit()
             raise

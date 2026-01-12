@@ -14,7 +14,7 @@ import logging
 import hashlib
 import json
 import asyncio
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from sqlmodel import Session, select
 from app.models.arena import ArenaSession, SchemaRating
 from app.models.review import Review, ReviewAgent, AgentConfig
@@ -127,7 +127,7 @@ class ArenaOrchestrator:
 
             # Oznacz jako completed (czeka na głosowanie)
             arena_session.status = "completed"
-            arena_session.completed_at = datetime.now(UTC)
+            arena_session.completed_at = datetime.now(timezone.utc)
 
             logger.info(
                 f"Arena session {arena_session_id} zakończona - "
@@ -310,7 +310,7 @@ class ArenaOrchestrator:
         arena_session.winner = winner
         arena_session.vote_comment = comment
         arena_session.voter_id = voter_id
-        arena_session.voted_at = datetime.now(UTC)
+        arena_session.voted_at = datetime.now(timezone.utc)
         self.session.add(arena_session)
         self.session.commit()
 
@@ -385,8 +385,8 @@ class ArenaOrchestrator:
             rating_a.losses += 1
         else:  # tie
             rating_a.ties += 1
-        rating_a.updated_at = datetime.now(UTC)
-        rating_a.last_used_at = datetime.now(UTC)
+        rating_a.updated_at = datetime.now(timezone.utc)
+        rating_a.last_used_at = datetime.now(timezone.utc)
 
         # Zaktualizuj rating B
         rating_b.elo_rating = new_rating_b
@@ -397,8 +397,8 @@ class ArenaOrchestrator:
             rating_b.losses += 1
         else:  # tie
             rating_b.ties += 1
-        rating_b.updated_at = datetime.now(UTC)
-        rating_b.last_used_at = datetime.now(UTC)
+        rating_b.updated_at = datetime.now(timezone.utc)
+        rating_b.last_used_at = datetime.now(timezone.utc)
 
         # Zapisz zmiany
         self.session.add(rating_a)

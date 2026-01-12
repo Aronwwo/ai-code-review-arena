@@ -165,8 +165,8 @@ async def update_project(
     for field, value in update_data.items():
         setattr(project, field, value)
 
-    from datetime import datetime, UTC
-    project.updated_at = datetime.now(UTC)
+    from datetime import datetime, timezone
+    project.updated_at = datetime.now(timezone.utc)
 
     session.add(project)
     session.commit()

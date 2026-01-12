@@ -1,7 +1,7 @@
 """Audit log model for tracking user actions."""
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from enum import Enum
 from sqlmodel import Field, SQLModel
 
@@ -49,7 +49,7 @@ class AuditLog(SQLModel, table=True):
     details: str | None = Field(default=None, max_length=2000)
     ip_address: str | None = Field(default=None, max_length=45)
     user_agent: str | None = Field(default=None, max_length=500)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 
 class AuditLogRead(SQLModel):
