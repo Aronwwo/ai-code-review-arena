@@ -60,12 +60,23 @@ export function getProviders(): CustomProvider[] {
 
       // Merge built-in providers with stored data (to get API keys)
       const mergedBuiltIn = BUILT_IN_PROVIDERS.map(builtIn => {
-        const stored = customProviders.find(p => p.id === builtIn.id);
-        if (stored) {
+        const storedProvider = customProviders.find(p => p.id === builtIn.id);
+        if (storedProvider) {
+          // For Ollama - models are fetched dynamically, don't use stored
+          // For others - only use stored models if API key is set
+          let models: string[] = [];
+          if (builtIn.id === 'ollama') {
+            // Ollama models are fetched dynamically from /ollama/models
+            models = storedProvider.models || [];
+          } else if (storedProvider.apiKey) {
+            // Other providers - only show models if API key is set
+            models = storedProvider.models || [];
+          }
+
           return {
             ...builtIn,
-            apiKey: stored.apiKey || '',
-            models: stored.models.length > 0 ? stored.models : builtIn.models
+            apiKey: storedProvider.apiKey || '',
+            models
           };
         }
         return builtIn;
@@ -81,6 +92,13 @@ export function getProviders(): CustomProvider[] {
   }
 
   return [...BUILT_IN_PROVIDERS];
+}
+
+/**
+ * Clear old cached provider data (call this to reset)
+ */
+export function clearProvidersCache(): void {
+  localStorage.removeItem(STORAGE_KEY);
 }
 
 /**
