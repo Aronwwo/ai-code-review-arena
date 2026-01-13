@@ -349,8 +349,8 @@ Stwórz końcowy raport przeglądu kodu."""
             )
 
         try:
-            async with asyncio.timeout(mod_timeout):
-                raw_output, response_provider, response_model = await provider_router.generate(
+            raw_output, response_provider, response_model = await asyncio.wait_for(
+                provider_router.generate(
                     messages=messages,
                     provider_name=mod_provider,
                     model=mod_model,
@@ -358,7 +358,9 @@ Stwórz końcowy raport przeglądu kodu."""
                     max_tokens=8192,
                     api_key=mod_api_key,
                     custom_provider_config=custom_provider_config
-                )
+                ),
+                timeout=mod_timeout
+            )
 
             # Store moderator summary in review
             review.summary = raw_output[:50000]
@@ -414,40 +416,23 @@ Stwórz końcowy raport przeglądu kodu."""
             LLMMessage(role="user", content=user_prompt)
         ]
 
-        try:
-            # Run with timeout
-            async with asyncio.timeout(timeout_seconds):
-                # Check cache if enabled
-                cache_key = None
-                effective_provider = custom_provider_config.id if custom_provider_config else (provider_name or settings.default_provider)
-                if settings.enable_agent_caching:
-                    cache_key = cache.generate_llm_cache_key(
-                        provider=effective_provider,
-                        model=model or settings.default_model,
-                        prompt=system_prompt + user_prompt,
-                        temperature=0.0
-                    )
-                    cached_response = cache.get(cache_key)
-                    if cached_response:
-                        raw_output = cached_response
-                        response_provider = effective_provider
-                        response_model = model or settings.default_model
-                    else:
-                        # Generate response
-                        raw_output, response_provider, response_model = await provider_router.generate(
-                            messages=messages,
-                            provider_name=provider_name,
-                            model=model,
-                            temperature=0.0,
-                            max_tokens=4096,
-                            api_key=api_key,
-                            custom_provider_config=custom_provider_config
-                        )
-                        # Cache the response
-                        cache.set(cache_key, raw_output)
+        async def _generate_with_cache():
+            """Helper to run generation with caching logic."""
+            cache_key = None
+            effective_provider = custom_provider_config.id if custom_provider_config else (provider_name or settings.default_provider)
+            if settings.enable_agent_caching:
+                cache_key = cache.generate_llm_cache_key(
+                    provider=effective_provider,
+                    model=model or settings.default_model,
+                    prompt=system_prompt + user_prompt,
+                    temperature=0.0
+                )
+                cached_response = cache.get(cache_key)
+                if cached_response:
+                    return cached_response, effective_provider, model or settings.default_model
                 else:
-                    # Generate response without caching
-                    raw_output, response_provider, response_model = await provider_router.generate(
+                    # Generate response
+                    raw_out, resp_provider, resp_model = await provider_router.generate(
                         messages=messages,
                         provider_name=provider_name,
                         model=model,
@@ -456,6 +441,27 @@ Stwórz końcowy raport przeglądu kodu."""
                         api_key=api_key,
                         custom_provider_config=custom_provider_config
                     )
+                    # Cache the response
+                    cache.set(cache_key, raw_out)
+                    return raw_out, resp_provider, resp_model
+            else:
+                # Generate response without caching
+                return await provider_router.generate(
+                    messages=messages,
+                    provider_name=provider_name,
+                    model=model,
+                    temperature=0.0,
+                    max_tokens=4096,
+                    api_key=api_key,
+                    custom_provider_config=custom_provider_config
+                )
+
+        try:
+            # Run with timeout
+            raw_output, response_provider, response_model = await asyncio.wait_for(
+                _generate_with_cache(),
+                timeout=timeout_seconds
+            )
 
             # Parse response
             parsed_successfully, issues_data = self._parse_response(raw_output)
