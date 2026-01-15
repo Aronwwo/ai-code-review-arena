@@ -1,8 +1,11 @@
 """Caching utilities for LLM responses and rate limiting."""
 import hashlib
 import json
+import logging
 from typing import Any
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # In-memory fallback cache if Redis is unavailable
 _memory_cache: dict[str, tuple[Any, float]] = {}
@@ -31,7 +34,7 @@ class CacheManager:
             # Test connection
             self.redis_client.ping()
         except Exception as e:
-            print(f"Redis connection failed, using in-memory cache: {e}")
+            logger.warning(f"Redis connection failed, using in-memory cache: {e}")
             self.redis_client = None
 
     def get(self, key: str) -> Any | None:
@@ -42,7 +45,7 @@ class CacheManager:
                 if value:
                     return json.loads(value)
             except Exception as e:
-                print(f"Redis get error: {e}")
+                logger.warning(f"Redis get error: {e}")
 
         # Fallback to memory cache
         import time
@@ -65,7 +68,7 @@ class CacheManager:
                 self.redis_client.setex(key, ttl, json.dumps(value))
                 return
             except Exception as e:
-                print(f"Redis set error: {e}")
+                logger.warning(f"Redis set error: {e}")
 
         # Fallback to memory cache
         import time
@@ -78,7 +81,7 @@ class CacheManager:
                 self.redis_client.delete(key)
                 return
             except Exception as e:
-                print(f"Redis delete error: {e}")
+                logger.warning(f"Redis delete error: {e}")
 
         # Fallback to memory cache
         if key in _memory_cache:
@@ -91,7 +94,7 @@ class CacheManager:
                 self.redis_client.flushdb()
                 return
             except Exception as e:
-                print(f"Redis clear error: {e}")
+                logger.warning(f"Redis clear error: {e}")
 
         # Fallback to memory cache
         _memory_cache.clear()
@@ -109,7 +112,7 @@ class CacheManager:
                         break
                 return
             except Exception as e:
-                print(f"Redis delete_prefix error: {e}")
+                logger.warning(f"Redis delete_prefix error: {e}")
 
         keys_to_delete = [key for key in _memory_cache.keys() if key.startswith(prefix)]
         for key in keys_to_delete:

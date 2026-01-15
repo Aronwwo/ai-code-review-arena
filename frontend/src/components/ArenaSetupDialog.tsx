@@ -70,19 +70,19 @@ export function ArenaSetupDialog({
   const [providers, setProviders] = useState<CustomProvider[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Domyślna konfiguracja - oba schematy z Ollama
+  // Domyślna konfiguracja - oba schematy z Mock
   const [config, setConfig] = useState<ArenaConfig>({
     schema_a: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { provider: 'mock', model: 'mock-fast' },
+      security: { provider: 'mock', model: 'mock-fast' },
+      performance: { provider: 'mock', model: 'mock-fast' },
+      style: { provider: 'mock', model: 'mock-fast' },
     },
     schema_b: {
-      general: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      security: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      performance: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
-      style: { provider: 'ollama', model: 'qwen2.5-coder:1.5b' },
+      general: { provider: 'mock', model: 'mock-fast' },
+      security: { provider: 'mock', model: 'mock-fast' },
+      performance: { provider: 'mock', model: 'mock-fast' },
+      style: { provider: 'mock', model: 'mock-fast' },
     },
   });
 
@@ -110,23 +110,25 @@ export function ArenaSetupDialog({
 
   const ollamaModels = useMemo(() => ollamaModelsData?.models || [], [ollamaModelsData?.models]);
 
-  // Aktualizuj domyślny model gdy załadują się modele Ollama
+  // Aktualizuj domyślny model gdy załadują się modele Ollama (tylko dla Ollama)
   useEffect(() => {
     if (ollamaModels && ollamaModels.length > 0) {
       const defaultModel = ollamaModels[0];
+      const updateAgent = (agent: AgentConfig): AgentConfig => {
+        if (agent.provider !== 'ollama') return agent;
+        return { ...agent, model: ollamaModels.includes(agent.model) ? agent.model : defaultModel };
+      };
+      const updateSchema = (schema: SchemaConfig): SchemaConfig => ({
+        general: updateAgent(schema.general),
+        security: updateAgent(schema.security),
+        performance: updateAgent(schema.performance),
+        style: updateAgent(schema.style),
+      });
+
       setConfig(prev => ({
-        schema_a: {
-          general: { ...prev.schema_a.general, model: defaultModel },
-          security: { ...prev.schema_a.security, model: defaultModel },
-          performance: { ...prev.schema_a.performance, model: defaultModel },
-          style: { ...prev.schema_a.style, model: defaultModel },
-        },
-        schema_b: {
-          general: { ...prev.schema_b.general, model: defaultModel },
-          security: { ...prev.schema_b.security, model: defaultModel },
-          performance: { ...prev.schema_b.performance, model: defaultModel },
-          style: { ...prev.schema_b.style, model: defaultModel },
-        },
+        ...prev,
+        schema_a: updateSchema(prev.schema_a),
+        schema_b: updateSchema(prev.schema_b),
       }));
     }
   }, [ollamaModels]);
@@ -139,6 +141,8 @@ export function ArenaSetupDialog({
     }
     return provider.models;
   };
+
+  const isProviderActive = (providerId: string) => getModelsForProvider(providerId).length > 0;
 
   const updateAgent = (schema: 'schema_a' | 'schema_b', roleId: string, updates: Partial<AgentConfig>) => {
     setConfig(prev => ({
@@ -155,6 +159,10 @@ export function ArenaSetupDialog({
     for (const schema of ['schema_a', 'schema_b'] as const) {
       for (const role of AGENT_ROLES) {
         const agent = config[schema][role.id as keyof SchemaConfig];
+        if (!isProviderActive(agent.provider)) {
+          toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: provider ${agent.provider} jest nieaktywny`);
+          return;
+        }
         if (!agent.model) {
           toast.error(`Schemat ${schema === 'schema_a' ? 'A' : 'B'}: wybierz model dla ${role.name}`);
           return;
@@ -190,6 +198,9 @@ export function ArenaSetupDialog({
 
   const warnings: string[] = [];
   if (fileCount === 0) warnings.push('Brak plików do przeglądu');
+  const hasInactiveProviders = (['schema_a', 'schema_b'] as const).some(schema =>
+    AGENT_ROLES.some(role => !isProviderActive(config[schema][role.id as keyof SchemaConfig].provider))
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -230,6 +241,8 @@ export function ArenaSetupDialog({
                 {AGENT_ROLES.map(role => {
                   const agent = config[schema][role.id as keyof SchemaConfig];
                   const RoleIcon = role.icon;
+                  const models = getModelsForProvider(agent.provider);
+                  const providerActive = models.length > 0;
                   return (
                     <Card key={role.id}>
                       <CardHeader>
@@ -265,15 +278,23 @@ export function ArenaSetupDialog({
                           {/* Model */}
                           <div>
                             <Label>Model</Label>
-                            <select
-                              className="w-full mt-1.5 px-3 py-2 bg-background border rounded-md"
-                              value={agent.model}
-                              onChange={(e) => updateAgent(schema, role.id, { model: e.target.value })}
-                            >
-                              {getModelsForProvider(agent.provider).map(m => (
-                                <option key={m} value={m}>{m}</option>
-                              ))}
-                            </select>
+                            {providerActive ? (
+                              <select
+                                className="w-full mt-1.5 px-3 py-2 bg-background border rounded-md"
+                                value={agent.model}
+                                onChange={(e) => updateAgent(schema, role.id, { model: e.target.value })}
+                              >
+                                {models.map(m => (
+                                  <option key={m} value={m}>{m}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="text-sm text-muted-foreground mt-2">
+                                {agent.provider === 'ollama'
+                                  ? 'Brak modeli Ollama - uruchom Ollama i pobierz model'
+                                  : 'Brak modeli - skonfiguruj w ustawieniach'}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -290,7 +311,7 @@ export function ArenaSetupDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Anuluj
           </Button>
-          <Button onClick={handleStartArena} disabled={submitting || isLoading || fileCount === 0}>
+          <Button onClick={handleStartArena} disabled={submitting || isLoading || fileCount === 0 || hasInactiveProviders}>
             {submitting || isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

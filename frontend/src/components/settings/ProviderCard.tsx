@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Edit, Trash2, Key, Globe, Check, X } from 'lucide-react';
+import { Edit, Trash2, Key, Globe, Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { CustomProvider } from '@/lib/providers';
 
@@ -12,9 +12,18 @@ interface ProviderCardProps {
   onEdit: (provider: CustomProvider) => void;
   onDelete: (providerId: string) => void;
   onUpdateApiKey: (providerId: string, apiKey: string) => void;
+  isLoadingModels?: boolean;
+  onRefreshModels?: (providerId: string) => void;
 }
 
-export function ProviderCard({ provider, onEdit, onDelete, onUpdateApiKey }: ProviderCardProps) {
+export function ProviderCard({
+  provider,
+  onEdit,
+  onDelete,
+  onUpdateApiKey,
+  isLoadingModels = false,
+  onRefreshModels,
+}: ProviderCardProps) {
   const [isEditingKey, setIsEditingKey] = useState(false);
   const [tempApiKey, setTempApiKey] = useState(provider.apiKey || '');
 
@@ -147,10 +156,31 @@ export function ProviderCard({ provider, onEdit, onDelete, onUpdateApiKey }: Pro
         ) : (
           // Other providers - show models only if API key is set
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              Modele
-            </Label>
-            {!provider.apiKey ? (
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">
+                Modele
+              </Label>
+              {onRefreshModels && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!provider.apiKey || isLoadingModels}
+                  onClick={() => onRefreshModels(provider.id)}
+                >
+                  {isLoadingModels ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    'Odśwież modele'
+                  )}
+                </Button>
+              )}
+            </div>
+            {isLoadingModels ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Pobieranie modeli...
+              </div>
+            ) : !provider.apiKey ? (
               <p className="text-xs text-muted-foreground italic">
                 Ustaw API key, aby używać tego providera
               </p>

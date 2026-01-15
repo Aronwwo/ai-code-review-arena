@@ -62,8 +62,8 @@ const AGENT_ROLES = [
 
 const DEFAULT_AGENT_CONFIG: AgentConfig = {
   enabled: true,
-  provider: 'ollama',
-  model: 'qwen2.5-coder:latest',
+  provider: 'mock',
+  model: 'mock-fast',
   timeout: 180 // 3 minuty
 };
 
@@ -96,7 +96,7 @@ export function ReviewConfigDialog({
     agents: createDefaultTeam(),
     teamA: createDefaultTeam(),
     teamB: createDefaultTeam(),
-    moderator: { provider: 'ollama', model: 'qwen2.5-coder:latest', timeout: 300 },
+    moderator: { provider: 'mock', model: 'mock-fast', timeout: 300 },
     mode: null,
   });
 
@@ -154,26 +154,33 @@ export function ReviewConfigDialog({
     }
   }, [ollamaModels]);
 
-  // Set default model when Ollama models load
+  // Set default model when Ollama models load (only for Ollama-selected agents)
   useEffect(() => {
     if (ollamaModels && ollamaModels.length > 0) {
       const defaultModel = ollamaModels[0];
-      setConfig(prev => {
-        const updateTeam = (team: TeamConfig): TeamConfig => ({
-          general: { ...team.general, model: ollamaModels.includes(team.general.model) ? team.general.model : defaultModel },
-          security: { ...team.security, model: ollamaModels.includes(team.security.model) ? team.security.model : defaultModel },
-          performance: { ...team.performance, model: ollamaModels.includes(team.performance.model) ? team.performance.model : defaultModel },
-          style: { ...team.style, model: ollamaModels.includes(team.style.model) ? team.style.model : defaultModel },
-        });
-
+      const updateAgent = (agent: AgentConfig): AgentConfig => {
+        if (agent.provider !== 'ollama') return agent;
         return {
-          ...prev,
-          agents: updateTeam(prev.agents),
-          teamA: prev.teamA ? updateTeam(prev.teamA) : undefined,
-          teamB: prev.teamB ? updateTeam(prev.teamB) : undefined,
-          moderator: { ...prev.moderator, model: ollamaModels.includes(prev.moderator.model) ? prev.moderator.model : defaultModel },
+          ...agent,
+          model: ollamaModels.includes(agent.model) ? agent.model : defaultModel,
         };
+      };
+      const updateTeam = (team: TeamConfig): TeamConfig => ({
+        general: updateAgent(team.general),
+        security: updateAgent(team.security),
+        performance: updateAgent(team.performance),
+        style: updateAgent(team.style),
       });
+
+      setConfig(prev => ({
+        ...prev,
+        agents: updateTeam(prev.agents),
+        teamA: prev.teamA ? updateTeam(prev.teamA) : undefined,
+        teamB: prev.teamB ? updateTeam(prev.teamB) : undefined,
+        moderator: prev.moderator.provider === 'ollama'
+          ? { ...prev.moderator, model: ollamaModels.includes(prev.moderator.model) ? prev.moderator.model : defaultModel }
+          : prev.moderator,
+      }));
     }
   }, [ollamaModels]);
 
@@ -188,6 +195,9 @@ export function ReviewConfigDialog({
 
     return provider.models;
   };
+
+  const isProviderActive = (providerId: string) => getModelsForProvider(providerId).length > 0;
+  const isAgentActive = (agent: AgentConfig) => agent.enabled && isProviderActive(agent.provider);
 
   // Update agent in specific team
   const updateTeamAgent = (team: 'agents' | 'teamA' | 'teamB', agentId: string, updates: Partial<AgentConfig>) => {
@@ -212,7 +222,16 @@ export function ReviewConfigDialog({
   };
 
   // Count enabled agents (for council mode - use agents, for arena - both teams always enabled)
-  const enabledAgentCount = config.mode === 'arena' ? 4 : Object.values(config.agents).filter(a => a.enabled).length;
+  const enabledAgentCount = config.mode === 'arena'
+    ? 4
+    : Object.values(config.agents).filter(isAgentActive).length;
+  const hasInactiveCouncilAgents = Object.values(config.agents)
+    .some(agent => agent.enabled && !isProviderActive(agent.provider));
+  const hasInactiveArenaAgents = (['teamA', 'teamB'] as const).some(teamName => {
+    const team = config[teamName];
+    if (!team) return false;
+    return Object.values(team).some(agent => !isProviderActive(agent.provider));
+  });
 
   const handleStartReview = () => {
     if (!config.mode) {
@@ -227,6 +246,10 @@ export function ReviewConfigDialog({
       }
 
       for (const [id, agent] of Object.entries(config.agents)) {
+        if (agent.enabled && !isProviderActive(agent.provider)) {
+          toast.error(`Agent ${id} ma nieaktywny provider`);
+          return;
+        }
         if (agent.enabled && !agent.model) {
           toast.error(`Wybierz model dla agenta ${id}`);
           return;
@@ -240,6 +263,10 @@ export function ReviewConfigDialog({
         const team = config[teamName];
         if (!team) continue;
         for (const [id, agent] of Object.entries(team)) {
+          if (!isProviderActive(agent.provider)) {
+            toast.error(`Zespół ${teamName === 'teamA' ? 'A' : 'B'}: agent ${id} ma nieaktywny provider`);
+            return;
+          }
           if (!agent.model) {
             toast.error(`Zespół ${teamName === 'teamA' ? 'A' : 'B'}: Wybierz model dla agenta ${id}`);
             return;
@@ -248,6 +275,10 @@ export function ReviewConfigDialog({
       }
     }
 
+    if (!isProviderActive(config.moderator.provider)) {
+      toast.error('Moderator ma nieaktywny provider');
+      return;
+    }
     if (!config.moderator.model) {
       toast.error('Wybierz model dla moderatora');
       return;
@@ -278,9 +309,12 @@ export function ReviewConfigDialog({
           const agent = teamConfig[role.id as keyof TeamConfig];
           const Icon = role.icon;
           const models = getModelsForProvider(agent.provider);
+          const providerActive = models.length > 0;
+          const agentActive = agent.enabled && providerActive;
+          const showConfig = agent.enabled || !providerActive;
 
           return (
-            <Card key={role.id} className={`transition-opacity ${!agent.enabled ? 'opacity-50' : ''}`}>
+            <Card key={role.id} className={`transition-opacity ${!agentActive ? 'opacity-50' : ''}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -289,7 +323,8 @@ export function ReviewConfigDialog({
                   </div>
                   {showSwitch && (
                     <Switch
-                      checked={agent.enabled}
+                      checked={agentActive}
+                      disabled={!providerActive}
                       onCheckedChange={(checked) => updateTeamAgent(team, role.id, { enabled: checked })}
                     />
                   )}
@@ -297,7 +332,7 @@ export function ReviewConfigDialog({
                 <CardDescription className="text-xs">{role.description}</CardDescription>
               </CardHeader>
 
-              {agent.enabled && (
+              {showConfig && (
                 <CardContent className="space-y-3">
                   <div className="space-y-2">
                     <Label className="text-xs">Provider</Label>
@@ -309,7 +344,8 @@ export function ReviewConfigDialog({
                         const newModels = getModelsForProvider(newProvider);
                         updateTeamAgent(team, role.id, {
                           provider: newProvider,
-                          model: newModels[0] || ''
+                          model: newModels[0] || '',
+                          enabled: newModels.length > 0 ? agent.enabled : false,
                         });
                       }}
                     >
@@ -586,7 +622,7 @@ export function ReviewConfigDialog({
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Ładowanie modeli...
                         </div>
-                      ) : (
+                      ) : getModelsForProvider(config.moderator.provider).length > 0 ? (
                         <select
                           className="w-full p-2 border rounded-md bg-background"
                           value={config.moderator.model}
@@ -596,6 +632,12 @@ export function ReviewConfigDialog({
                             <option key={m} value={m}>{m}</option>
                           ))}
                         </select>
+                      ) : (
+                        <div className="text-sm text-muted-foreground p-2">
+                          {config.moderator.provider === 'ollama'
+                            ? 'Brak modeli Ollama - uruchom Ollama i pobierz model'
+                            : 'Brak modeli - skonfiguruj w ustawieniach'}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -621,7 +663,14 @@ export function ReviewConfigDialog({
               </Button>
               <Button
                 onClick={handleStartReview}
-                disabled={!config.mode || isLoading || (config.mode === 'council' && enabledAgentCount === 0) || fileCount === 0}
+                disabled={
+                  !config.mode ||
+                  isLoading ||
+                  (config.mode === 'council' && (enabledAgentCount === 0 || hasInactiveCouncilAgents)) ||
+                  (config.mode === 'arena' && hasInactiveArenaAgents) ||
+                  fileCount === 0 ||
+                  !isProviderActive(config.moderator.provider)
+                }
               >
                 {isLoading ? (
                   <>

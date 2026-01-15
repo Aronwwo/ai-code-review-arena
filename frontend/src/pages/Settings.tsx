@@ -33,6 +33,7 @@ export function Settings() {
   const [providers, setProviders] = useState<CustomProvider[]>(getProviders);
   const [isAddingProvider, setIsAddingProvider] = useState(false);
   const [editingProvider, setEditingProvider] = useState<CustomProvider | null>(null);
+  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
 
   // Pobierz modele Ollama
   const {
@@ -78,6 +79,44 @@ export function Settings() {
     toast.success('Provider usunięty');
   };
 
+  const fetchProviderModels = async (provider: CustomProvider, apiKey: string) => {
+    if (provider.id === 'ollama') return;
+    if (!apiKey) return;
+
+    if (provider.id === 'mock') {
+      setProviders(prev => prev.map(p =>
+        p.id === provider.id ? { ...p, models: ['mock-fast', 'mock-smart'] } : p
+      ));
+      return;
+    }
+
+    try {
+      setLoadingModels(prev => ({ ...prev, [provider.id]: true }));
+      const response = await api.post('/api/providers/models', {
+        provider_id: provider.id,
+        base_url: provider.baseUrl,
+        api_key: apiKey,
+        header_name: provider.headerName || 'Authorization',
+        header_prefix: provider.headerPrefix ?? 'Bearer ',
+      });
+      const models: string[] = response.data?.models || [];
+      const cached = Boolean(response.data?.cached);
+      if (models.length > 0) {
+        setProviders(prev => prev.map(p =>
+          p.id === provider.id ? { ...p, models } : p
+        ));
+        toast.success(`Pobrano modele: ${models.length}${cached ? ' (cache)' : ''}`);
+      } else {
+        toast.error('API nie zwróciło modeli — pozostawiono ręcznie wpisane');
+      }
+    } catch (error) {
+      console.error('Failed to fetch provider models:', error);
+      toast.error(`Nie udało się pobrać modeli dla ${provider.name}`);
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [provider.id]: false }));
+    }
+  };
+
   const handleSaveProvider = (provider: CustomProvider) => {
     if (editingProvider) {
       setProviders(prev => prev.map(p => p.id === provider.id ? provider : p));
@@ -86,12 +125,31 @@ export function Settings() {
       setProviders(prev => [...prev, provider]);
       toast.success('Provider dodany');
     }
+
+    if (provider.apiKey) {
+      fetchProviderModels(provider, provider.apiKey);
+    }
   };
 
   const handleUpdateApiKey = (providerId: string, apiKey: string) => {
     setProviders(prev => prev.map(p =>
-      p.id === providerId ? { ...p, apiKey } : p
+      p.id === providerId ? { ...p, apiKey, models: apiKey ? p.models : [] } : p
     ));
+
+    const provider = providers.find(p => p.id === providerId);
+    if (provider && apiKey) {
+      fetchProviderModels({ ...provider, apiKey }, apiKey);
+    }
+  };
+
+  const handleRefreshModels = (providerId: string) => {
+    const provider = providers.find(p => p.id === providerId);
+    if (!provider) return;
+    if (!provider.apiKey) {
+      toast.error('Ustaw API key, aby pobrać modele');
+      return;
+    }
+    fetchProviderModels(provider, provider.apiKey);
   };
 
   const handleSaveAll = () => {
@@ -162,6 +220,8 @@ export function Settings() {
                 onEdit={handleEditProvider}
                 onDelete={handleDeleteProvider}
                 onUpdateApiKey={handleUpdateApiKey}
+                isLoadingModels={Boolean(loadingModels[provider.id])}
+                onRefreshModels={handleRefreshModels}
               />
             </div>
           ))}

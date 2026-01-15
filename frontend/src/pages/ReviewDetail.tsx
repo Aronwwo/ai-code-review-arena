@@ -221,6 +221,30 @@ export function ReviewDetail() {
 
   // Raport moderatora z review.summary (nowy flow)
   const moderatorSummaryText = review?.summary || null;
+  const parseModeratorSummary = (raw: string | null) => {
+    if (!raw) return { text: null, summary: null, overallQuality: null, issues: null };
+    const cleaned = raw
+      .trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/^```/i, '')
+      .replace(/```$/i, '')
+      .replace(/^json\s*/i, '');
+
+    try {
+      const data = JSON.parse(cleaned);
+      const summary = typeof data.summary === 'string' ? data.summary : null;
+      const overallQuality = typeof data.overall_quality === 'string' ? data.overall_quality : null;
+      const issues = Array.isArray(data.issues) ? data.issues : null;
+      if (summary || overallQuality || issues) {
+        return { text: null, summary, overallQuality, issues };
+      }
+    } catch {
+      // Fallback to raw text
+    }
+
+    return { text: cleaned, summary: null, overallQuality: null, issues: null };
+  };
+  const moderatorParsed = parseModeratorSummary(moderatorSummaryText);
 
   // Liczba agentów z timeout
   const timedOutAgents = agents?.filter(a => a.timed_out) || [];
@@ -368,7 +392,30 @@ export function ReviewDetail() {
           </CardHeader>
           <CardContent>
             <div className="prose prose-sm max-w-none dark:prose-invert">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{moderatorSummaryText}</p>
+              {moderatorParsed.summary || moderatorParsed.overallQuality || moderatorParsed.issues ? (
+                <div className="space-y-3">
+                  {moderatorParsed.summary && (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {moderatorParsed.summary}
+                    </p>
+                  )}
+                  {moderatorParsed.overallQuality && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Ogólna jakość: </span>
+                      <Badge variant="secondary">{moderatorParsed.overallQuality}</Badge>
+                    </div>
+                  )}
+                  {moderatorParsed.issues && (
+                    <div className="text-sm text-muted-foreground">
+                      Wykryte problemy: {moderatorParsed.issues.length}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {moderatorParsed.text || moderatorSummaryText}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

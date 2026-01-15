@@ -1,8 +1,11 @@
 """Rate limiting utilities."""
+import logging
 import time
 from fastapi import HTTPException, Request, status
 from app.config import settings
 from app.utils.cache import cache
+
+logger = logging.getLogger(__name__)
 
 # In-memory fallback for rate limiting (if Redis unavailable)
 _memory_rate_limit: dict[str, list[float]] = {}
@@ -53,7 +56,7 @@ def check_rate_limit(request: Request, user_id: int | None = None, limit: int | 
 
         except Exception as e:
             # Fall through to memory-based rate limiting
-            print(f"Redis rate limit error: {e}")
+            logger.warning(f"Redis rate limit error: {e}")
 
     # Fallback to in-memory rate limiting
     if key not in _memory_rate_limit:

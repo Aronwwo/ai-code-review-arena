@@ -21,6 +21,13 @@ const STORAGE_KEY = 'ai-code-review-providers';
 // Models are empty - they require API key to be set first (except Ollama which fetches dynamically)
 const BUILT_IN_PROVIDERS: CustomProvider[] = [
   {
+    id: 'mock',
+    name: 'Mock (bez API)',
+    description: 'Szybkie testy bez klucza API',
+    models: ['mock-fast', 'mock-smart'],
+    isBuiltIn: true,
+  },
+  {
     id: 'groq',
     name: 'Groq',
     description: 'Szybkie API z modelami Llama i Mixtral',
@@ -30,10 +37,37 @@ const BUILT_IN_PROVIDERS: CustomProvider[] = [
     apiKey: ''
   },
   {
+    id: 'openai',
+    name: 'OpenAI',
+    description: 'Oficjalne API OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    models: [], // Requires API key - models will be shown after key is set
+    isBuiltIn: true,
+    apiKey: ''
+  },
+  {
     id: 'gemini',
     name: 'Google Gemini',
     description: 'Modele Gemini od Google',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    models: [], // Requires API key - models will be shown after key is set
+    isBuiltIn: true,
+    apiKey: ''
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    description: 'Modele DeepSeek (API zgodne z OpenAI)',
+    baseUrl: 'https://api.deepseek.com/v1',
+    models: [], // Requires API key - models will be shown after key is set
+    isBuiltIn: true,
+    apiKey: ''
+  },
+  {
+    id: 'perplexity',
+    name: 'Perplexity',
+    description: 'Perplexity AI (API zgodne z OpenAI)',
+    baseUrl: 'https://api.perplexity.ai',
     models: [], // Requires API key - models will be shown after key is set
     isBuiltIn: true,
     apiKey: ''
@@ -68,6 +102,9 @@ export function getProviders(): CustomProvider[] {
           if (builtIn.id === 'ollama') {
             // Ollama models are fetched dynamically from /ollama/models
             models = storedProvider.models || [];
+          } else if (builtIn.id === 'mock') {
+            // Mock models are always available
+            models = builtIn.models;
           } else if (storedProvider.apiKey) {
             // Other providers - only show models if API key is set
             models = storedProvider.models || [];
