@@ -616,7 +616,7 @@ export function ReviewDetail() {
                           <div className="mb-4">
                             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                               <FileCode className="h-4 w-4" />
-                              Problematyczny Kod
+                              Fragment kodu
                             </h4>
                             <CodeViewer
                               code={codeInfo.snippet}

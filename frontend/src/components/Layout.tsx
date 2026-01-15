@@ -28,14 +28,14 @@ export function Layout() {
                 <Link to="/projects">
                   <Button variant="ghost" size="sm">
                     <FolderGit2 className="mr-2 h-4 w-4" />
-                    Projects
+                    Projekty
                   </Button>
                 </Link>
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-muted-foreground">{user?.username}</span>
                   <Button variant="ghost" size="sm" onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    Logout
+                    Wyloguj
                   </Button>
                 </div>
               </>
@@ -43,11 +43,11 @@ export function Layout() {
               <>
                 <Link to="/login">
                   <Button variant="ghost" size="sm">
-                    Login
+                    Zaloguj
                   </Button>
                 </Link>
                 <Link to="/register">
-                  <Button size="sm">Sign Up</Button>
+                  <Button size="sm">Załóż konto</Button>
                 </Link>
               </>
             )}
@@ -63,10 +63,10 @@ export function Layout() {
       {/* Footer */}
       <footer className="border-t">
         <div className="container flex h-16 items-center justify-between text-sm text-muted-foreground">
-          <p>&copy; 2024 AI Code Review Arena. Built with FastAPI + React.</p>
+          <p>&copy; 2024 AI Code Review Arena. Zbudowane w FastAPI + React.</p>
           <div className="flex space-x-4">
             <a href="/docs" target="_blank" className="hover:text-foreground">
-              API Docs
+              Dokumentacja API
             </a>
           </div>
         </div>

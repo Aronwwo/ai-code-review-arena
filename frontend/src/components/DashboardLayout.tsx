@@ -52,7 +52,7 @@ export function DashboardLayout() {
         <div className="flex h-16 items-center border-b px-4 lg:px-6">
           <Link to="/dashboard" className="flex items-center gap-2">
             <Bot className="h-6 w-6 text-primary" />
-            <span className="text-base font-bold lg:text-lg">AI Code Review</span>
+            <span className="text-base font-bold lg:text-lg">AI Code Review Arena</span>
           </Link>
         </div>
         <nav className="flex-1 space-y-1 p-4">
@@ -79,7 +79,7 @@ export function DashboardLayout() {
           <div className="flex h-16 items-center justify-between border-b px-4">
             <Link to="/dashboard" className="flex items-center gap-2">
               <Bot className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold">AI Code Review</span>
+              <span className="text-lg font-bold">AI Code Review Arena</span>
             </Link>
             <Button
               variant="ghost"

@@ -318,12 +318,12 @@ export function ProjectDetail() {
   if (!project) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
-        <h2 className="text-2xl font-bold mb-2">Projekt nie znaleziony</h2>
+        <h2 className="text-2xl font-bold mb-2">Nie znaleziono projektu</h2>
         <p className="text-muted-foreground mb-4">Projekt, którego szukasz, nie istnieje</p>
         <Link to="/projects">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Powrót do Projektów
+            Powrót do projektów
           </Button>
         </Link>
       </div>
@@ -336,7 +336,7 @@ export function ProjectDetail() {
         <Link to="/projects">
           <Button variant="ghost" size="sm" className="mb-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Powrót do Projektów
+            Powrót do projektów
           </Button>
         </Link>
         <div className="flex items-center justify-between">
@@ -669,7 +669,7 @@ export function ProjectDetail() {
                       <CardDescription>
                         {review.agent_count} agentów • {review.issue_count} problemów
                         <br />
-                        Utworzono: {new Date(review.created_at).toLocaleString()}
+                        Data utworzenia: {new Date(review.created_at).toLocaleString()}
                       </CardDescription>
                     </CardHeader>
                   </Card>

@@ -49,7 +49,7 @@ export function Rankings() {
           <Trophy className="h-8 w-8 text-primary" />
           <div>
             <h1 className="text-3xl font-bold">Rankingi Areny</h1>
-            <p className="text-muted-foreground">Ranking zespołów AI oparty o głosy w trybie Areny</p>
+            <p className="text-muted-foreground">Ranking zespołów AI oparty na głosach w trybie Areny</p>
           </div>
         </div>
       </div>
@@ -115,7 +115,7 @@ export function Rankings() {
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold">Zespol #{team.id}</span>
+                      <span className="font-semibold">Zespół #{team.id}</span>
                       <Badge variant="outline" className="text-xs">
                         {team.games_played} gier
                       </Badge>
@@ -155,7 +155,7 @@ export function Rankings() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Laczna liczba zespolow</p>
+                  <p className="text-sm text-muted-foreground">Łączna liczba zespołów</p>
                   <p className="text-2xl font-bold">{teamRankings.length}</p>
                 </div>
                 <Users className="h-8 w-8 text-blue-500" />
@@ -167,7 +167,7 @@ export function Rankings() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Laczna liczba gier</p>
+                  <p className="text-sm text-muted-foreground">Łączna liczba gier</p>
                   <p className="text-2xl font-bold">
                     {Math.floor(teamRankings.reduce((acc, t) => acc + t.games_played, 0) / 2)}
                   </p>

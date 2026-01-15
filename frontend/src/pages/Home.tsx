@@ -15,14 +15,14 @@ export function Home() {
           AI Code Review Arena
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Wieloagentowy przegląd kodu AI z możliwością debaty. Twój kod zostanie przeanalizowany
-          przez wyspecjalizowanych agentów, którzy następnie przedyskutują krytyczne problemy.
+          Wieloagentowy przegląd kodu z trybem Rady i Areny. Agenci analizują kod z różnych
+          perspektyw, a moderator podsumowuje najważniejsze wnioski.
         </p>
         <div className="flex justify-center gap-4 mt-8">
           {isAuthenticated ? (
             <Link to="/projects">
               <Button size="lg">
-                Przejdź do Projektów
+                Przejdź do projektów
               </Button>
             </Link>
           ) : (
@@ -45,10 +45,9 @@ export function Home() {
         <Card>
           <CardHeader>
             <Users className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Wieloagentowy przegląd</CardTitle>
+            <CardTitle>Wieloagentowa analiza</CardTitle>
             <CardDescription>
-              Czterech wyspecjalizowanych agentów (Ogólny, Bezpieczeństwo, Wydajność, Styl)
-              analizuje Twój kod z różnych perspektyw.
+              Cztery role: ogólny, bezpieczeństwo, wydajność i styl. Każda ma własny model.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -58,8 +57,7 @@ export function Home() {
             <MessageSquare className="h-10 w-10 text-primary mb-2" />
             <CardTitle>Tryb Rady</CardTitle>
             <CardDescription>
-              Agenci omawiają kod współpracując ze sobą, budując na wzajemnych spostrzeżeniach
-              by osiągnąć kompleksowe rekomendacje.
+              Jeden zespół agentów dochodzi do wspólnego wniosku i raportu.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -69,8 +67,7 @@ export function Home() {
             <Target className="h-10 w-10 text-primary mb-2" />
             <CardTitle>Tryb Areny</CardTitle>
             <CardDescription>
-              Oskarżyciel i Obrońca debatują nad konkretnymi problemami. Moderator wydaje
-              ostateczny werdykt o wadze i zasadności.
+              Dwa zespoły analizują kod, a Ty wybierasz lepszy wynik. Głosy budują ranking.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -100,10 +97,9 @@ export function Home() {
         <Card>
           <CardHeader>
             <Code2 className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Darmowy i otwarty</CardTitle>
+            <CardTitle>Elastyczne modele</CardTitle>
             <CardDescription>
-              Działa z darmowymi API LLM, lokalnymi modelami Ollama lub mockiem do testów.
-              Nie wymaga płatnych usług.
+              Działa z mockiem do testów, Ollamą lokalnie lub zewnętrznymi API.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -121,7 +117,7 @@ export function Home() {
                 </div>
                 <h3 className="font-semibold">Utwórz projekt</h3>
                 <p className="text-sm text-muted-foreground">
-                  Wgraj lub wklej pliki z kodem
+                  Dodaj pliki z kodem do analizy
                 </p>
               </div>
             </CardContent>
@@ -133,9 +129,9 @@ export function Home() {
                 <div className="bg-primary text-primary-foreground rounded-full w-12 h-12 flex items-center justify-center mx-auto font-bold text-lg">
                   2
                 </div>
-                <h3 className="font-semibold">Uruchom przegląd</h3>
+                <h3 className="font-semibold">Wybierz tryb</h3>
                 <p className="text-sm text-muted-foreground">
-                  Wybierz agentów i rozpocznij analizę
+                  Rada dla konsensusu lub Arena dla porównania
                 </p>
               </div>
             </CardContent>
@@ -147,9 +143,9 @@ export function Home() {
                 <div className="bg-primary text-primary-foreground rounded-full w-12 h-12 flex items-center justify-center mx-auto font-bold text-lg">
                   3
                 </div>
-                <h3 className="font-semibold">Zobacz problemy</h3>
+                <h3 className="font-semibold">Zobacz wyniki</h3>
                 <p className="text-sm text-muted-foreground">
-                  Przeglądaj znalezione problemy z wagą i sugestiami
+                  Raport moderatora, problemy i sugestie
                 </p>
               </div>
             </CardContent>
@@ -161,9 +157,9 @@ export function Home() {
                 <div className="bg-primary text-primary-foreground rounded-full w-12 h-12 flex items-center justify-center mx-auto font-bold text-lg">
                   4
                 </div>
-                <h3 className="font-semibold">Uruchom debatę</h3>
+                <h3 className="font-semibold">Głębsza analiza</h3>
                 <p className="text-sm text-muted-foreground">
-                  Rozpocznij konwersacje agentów dla głębszej analizy
+                  Debaty i dyskusje agentów dla wybranych problemów
                 </p>
               </div>
             </CardContent>

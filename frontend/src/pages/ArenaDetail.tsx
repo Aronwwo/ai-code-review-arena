@@ -44,10 +44,10 @@ export function ArenaDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['arena-session', id] });
-      toast.success('Glos zapisany pomyslnie!');
+      toast.success('Głos zapisany pomyślnie!');
     },
     onError: (error: unknown) => {
-      toast.error(parseApiError(error, 'Nie udalo sie zaglosowac'));
+      toast.error(parseApiError(error, 'Nie udało się zagłosować'));
     },
   });
 
@@ -85,7 +85,7 @@ export function ArenaDetail() {
       return (
         <div className="text-center py-8 text-muted-foreground">
           <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-          <p>Zespol {teamName} nie znalazl zadnych problemow</p>
+          <p>Zespół {teamName} nie znalazł żadnych problemów</p>
         </div>
       );
     }
@@ -133,12 +133,12 @@ export function ArenaDetail() {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Sesja nie znaleziona</h2>
-        <p className="text-muted-foreground mb-4">Sesja Arena, ktorej szukasz, nie istnieje</p>
+        <h2 className="text-2xl font-bold mb-2">Nie znaleziono sesji</h2>
+        <p className="text-muted-foreground mb-4">Sesja Areny, której szukasz, nie istnieje</p>
         <Link to="/projects">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Powrot do Projektow
+            Powrót do projektów
           </Button>
         </Link>
       </div>
@@ -148,9 +148,9 @@ export function ArenaDetail() {
   const getStatusBadge = () => {
     switch (session.status) {
       case 'completed':
-        return <Badge variant="success">Zakonczona</Badge>;
+        return <Badge variant="success">Zakończona</Badge>;
       case 'voting':
-        return <Badge variant="warning">Oczekuje na glos</Badge>;
+        return <Badge variant="warning">Oczekuje na głos</Badge>;
       case 'running':
         return (
           <Badge variant="default">
@@ -159,7 +159,7 @@ export function ArenaDetail() {
           </Badge>
         );
       case 'failed':
-        return <Badge variant="destructive">Blad</Badge>;
+        return <Badge variant="destructive">Błąd</Badge>;
       default:
         return <Badge variant="secondary">Oczekuje</Badge>;
     }
@@ -172,7 +172,7 @@ export function ArenaDetail() {
         <Link to={`/projects/${session.project_id}`}>
           <Button variant="ghost" size="sm" className="mb-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Powrot do Projektu
+            Powrót do projektu
           </Button>
         </Link>
         <div className="flex items-center justify-between">
@@ -181,7 +181,7 @@ export function ArenaDetail() {
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Arena #{session.id}</h1>
               <p className="text-muted-foreground">
-                Utworzono: {new Date(session.created_at).toLocaleString()}
+                Data utworzenia: {new Date(session.created_at).toLocaleString()}
               </p>
             </div>
           </div>
@@ -206,7 +206,7 @@ export function ArenaDetail() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
-              <p>Zespoly analizuja kod... To moze potrwac kilka minut.</p>
+              <p>Zespoły analizują kod... To może potrwać kilka minut.</p>
             </div>
           </CardContent>
         </Card>
@@ -238,7 +238,7 @@ export function ArenaDetail() {
                 <p className="font-medium text-green-600">
                   {session.winner === 'tie'
                     ? 'Wynik: Remis!'
-                    : `Zwyciezca: Zespol ${session.winner}!`}
+                    : `Zwycięzca: Zespół ${session.winner}!`}
                 </p>
                 {session.vote_comment && (
                   <p className="text-sm text-muted-foreground mt-1">
@@ -261,7 +261,7 @@ export function ArenaDetail() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-blue-500" />
-                    <CardTitle>Zespol A</CardTitle>
+                    <CardTitle>Zespół A</CardTitle>
                     {session.winner === 'A' && (
                       <Trophy className="h-5 w-5 text-yellow-500" />
                     )}
@@ -298,7 +298,7 @@ export function ArenaDetail() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-red-500" />
-                    <CardTitle>Zespol B</CardTitle>
+                    <CardTitle>Zespół B</CardTitle>
                     {session.winner === 'B' && (
                       <Trophy className="h-5 w-5 text-yellow-500" />
                     )}
@@ -336,17 +336,17 @@ export function ArenaDetail() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Scale className="h-5 w-5" />
-                  Zaglosuj na zwyciezce
+                  Zagłosuj na zwycięzcę
                 </CardTitle>
                 <CardDescription>
-                  Ktory zespol dal lepsze wyniki analizy kodu? Twoj glos wplywa na ranking ELO zespolow.
+                  Który zespół dał lepsze wyniki analizy kodu? Twój głos wpływa na ranking ELO zespołów.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Komentarz (opcjonalnie)</Label>
                   <Textarea
-                    placeholder="Dlaczego wybrales ten zespol?"
+                    placeholder="Dlaczego wybrałeś ten zespół?"
                     value={voteComment}
                     onChange={(e) => setVoteComment(e.target.value)}
                     rows={3}
@@ -361,7 +361,7 @@ export function ArenaDetail() {
                     disabled={voteMutation.isPending}
                   >
                     <ThumbsUp className="mr-2 h-5 w-5 text-blue-500" />
-                    Zespol A wygrywa
+                    Zespół A wygrywa
                   </Button>
                   <Button
                     size="lg"
@@ -381,13 +381,13 @@ export function ArenaDetail() {
                     disabled={voteMutation.isPending}
                   >
                     <ThumbsDown className="mr-2 h-5 w-5 text-red-500" />
-                    Zespol B wygrywa
+                    Zespół B wygrywa
                   </Button>
                 </div>
                 {voteMutation.isPending && (
                   <div className="flex items-center justify-center gap-2 text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Zapisywanie glosu...</span>
+                    <span>Zapisywanie głosu...</span>
                   </div>
                 )}
               </CardContent>
