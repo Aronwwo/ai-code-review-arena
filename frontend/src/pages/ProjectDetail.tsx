@@ -342,12 +342,12 @@ export function ProjectDetail() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
-            <p className="text-muted-foreground">{project.description || 'Brak opisu'}</p>
+            <p className="text-muted-foreground">{project.description || 'Brak opisu projektu'}</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={() => setIsAddingFile(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Dodaj Plik
+              Dodaj plik
             </Button>
             <Button
               onClick={() => setIsReviewConfigOpen(true)}
@@ -361,7 +361,7 @@ export function ProjectDetail() {
               ) : (
                 <>
                   <Settings2 className="mr-2 h-4 w-4" />
-                  Konfiguruj Review
+                  Konfiguruj przegląd
                 </>
               )}
             </Button>
@@ -373,9 +373,9 @@ export function ProjectDetail() {
       <Dialog open={isAddingFile} onOpenChange={setIsAddingFile}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Dodaj Plik</DialogTitle>
+            <DialogTitle>Dodaj plik</DialogTitle>
             <DialogDescription>
-              Prześlij plik lub wklej kod, aby dodać go do projektu
+              Prześlij plik albo wklej kod, aby dodać go do projektu
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddFile}>
@@ -389,7 +389,7 @@ export function ProjectDetail() {
                   size="sm"
                 >
                   <Upload className="mr-2 h-4 w-4" />
-                  Prześlij Plik
+                  Prześlij plik
                 </Button>
                 <Button
                   type="button"
@@ -398,13 +398,13 @@ export function ProjectDetail() {
                   size="sm"
                 >
                   <FileCode className="mr-2 h-4 w-4" />
-                  Wklej Kod
+                  Wklej kod
                 </Button>
               </div>
 
               {uploadMode === 'file' && (
                 <div className="space-y-2">
-                  <Label htmlFor="file-upload">Wybierz Plik</Label>
+                  <Label htmlFor="file-upload">Wybierz plik</Label>
                   <Input
                     id="file-upload"
                     type="file"
@@ -419,7 +419,7 @@ export function ProjectDetail() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="filename">Nazwa Pliku</Label>
+                  <Label htmlFor="filename">Nazwa pliku</Label>
                   <Input
                     id="filename"
                     placeholder="app.py"
@@ -468,7 +468,7 @@ export function ProjectDetail() {
                 Anuluj
               </Button>
               <Button type="submit" disabled={addFileMutation.isPending}>
-                {addFileMutation.isPending ? 'Dodawanie...' : 'Dodaj Plik'}
+                {addFileMutation.isPending ? 'Dodawanie...' : 'Dodaj plik'}
               </Button>
             </DialogFooter>
           </form>
@@ -547,13 +547,13 @@ export function ProjectDetail() {
                           >
                             {isEditing ? (
                               <>
-                                <Eye className="mr-2 h-4 w-4" />
-                                Tryb Podglądu
+                              <Eye className="mr-2 h-4 w-4" />
+                              Tryb podglądu
                               </>
                             ) : (
                               <>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Tryb Edycji
+                              <Edit className="mr-2 h-4 w-4" />
+                              Tryb edycji
                               </>
                             )}
                           </Button>
@@ -619,7 +619,7 @@ export function ProjectDetail() {
                           }}
                           disabled={updateFileMutation.isPending}
                         >
-                          {updateFileMutation.isPending ? 'Zapisywanie...' : 'Zapisz Zmiany'}
+                          {updateFileMutation.isPending ? 'Zapisywanie...' : 'Zapisz zmiany'}
                         </Button>
                       </DialogFooter>
                     )}
@@ -631,9 +631,9 @@ export function ProjectDetail() {
             <EmptyState
               icon={FileCode}
               title="Brak plików"
-              description="Prześlij pliki z kodem do projektu, aby rozpocząć analizę przez agentów AI"
+              description="Dodaj pliki z kodem, aby uruchomić analizę"
               action={{
-                label: 'Dodaj Pierwszy Plik',
+                label: 'Dodaj pierwszy plik',
                 onClick: () => setIsAddingFile(true),
               }}
             />
@@ -648,7 +648,7 @@ export function ProjectDetail() {
                   <Card className="hover:shadow-lg transition-shadow cursor-pointer">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle>Review #{review.id}</CardTitle>
+                      <CardTitle>Przegląd #{review.id}</CardTitle>
                         <Badge
                           variant={
                             review.status === 'completed'
@@ -680,11 +680,11 @@ export function ProjectDetail() {
             <EmptyState
               icon={Play}
               title="Brak przeglądów"
-              description="Uruchom przegląd, aby przeanalizować kod przez wielu agentów AI. Najpierw dodaj pliki!"
+                      description="Uruchom przegląd, aby przeanalizować kod. Najpierw dodaj pliki."
               action={
                 (project.files?.length || 0) > 0
                   ? {
-                      label: 'Konfiguruj Przegląd',
+                              label: 'Konfiguruj przegląd',
                       onClick: () => setIsReviewConfigOpen(true),
                     }
                   : undefined

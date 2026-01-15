@@ -208,10 +208,10 @@ export function ArenaSetupDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Swords className="h-6 w-6 text-orange-500" />
-            Combat Arena - Porównanie Schematów
+            Arena - porównanie zespołów
           </DialogTitle>
           <DialogDescription>
-            Skonfiguruj dwa kompletne schematy review (A vs B). Każdy schemat ma 4 agentów.
+            Skonfiguruj dwa zespoły (A vs B). Każdy zespół ma 4 role agentów i własne modele.
           </DialogDescription>
         </DialogHeader>
 

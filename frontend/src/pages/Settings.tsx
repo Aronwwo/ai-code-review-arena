@@ -162,7 +162,7 @@ export function Settings() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Ustawienia</h1>
-          <p className="text-muted-foreground">Zarządzaj providerami AI i kluczami API</p>
+          <p className="text-muted-foreground">Zarządzaj providerami LLM i kluczami API</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetchOllama()} disabled={ollamaLoading}>
@@ -170,7 +170,7 @@ export function Settings() {
             Odśwież
           </Button>
           <Button onClick={handleSaveAll}>
-            Zapisz Wszystko
+            Zapisz zmiany
           </Button>
         </div>
       </div>
@@ -197,15 +197,15 @@ export function Settings() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Globe className="h-5 w-5" />
-                Providerzy API
+                Providerzy LLM
               </CardTitle>
               <CardDescription>
-                Dodaj dowolne API kompatybilne z OpenAI lub własne endpointy
+                Dodaj providerów kompatybilnych z OpenAI lub własne endpointy
               </CardDescription>
             </div>
             <Button onClick={handleAddProvider}>
               <Plus className="h-4 w-4 mr-2" />
-              Dodaj Provider
+              Dodaj providera
             </Button>
           </div>
         </CardHeader>
@@ -242,10 +242,10 @@ export function Settings() {
           <div className="flex gap-3">
             <Key className="h-5 w-5 text-primary mt-0.5" />
             <div className="space-y-1">
-              <p className="text-sm font-medium">O Ustawieniach</p>
+              <p className="text-sm font-medium">O ustawieniach</p>
               <p className="text-sm text-muted-foreground">
-                Wszystkie klucze API i ustawienia są przechowywane lokalnie w Twojej przeglądarce.
-                Nigdy nie są wysyłane na serwer. Możesz dodać dowolne API kompatybilne z formatem OpenAI.
+                Klucze API i konfiguracje providerów są przechowywane lokalnie w przeglądarce.
+                Możesz dodać dowolne API kompatybilne z formatem OpenAI.
               </p>
             </div>
           </div>

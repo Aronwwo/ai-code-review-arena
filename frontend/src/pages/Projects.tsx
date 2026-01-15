@@ -110,7 +110,7 @@ export function Projects() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projekty</h1>
-          <p className="text-muted-foreground">Zarządzaj swoimi projektami do przeglądu kodu</p>
+          <p className="text-muted-foreground">Zarządzaj projektami i uruchamiaj przeglądy kodu</p>
         </div>
         <Button onClick={() => setIsCreating(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -121,15 +121,15 @@ export function Projects() {
       <Dialog open={isCreating} onOpenChange={setIsCreating}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Utwórz Nowy Projekt</DialogTitle>
+            <DialogTitle>Nowy projekt</DialogTitle>
             <DialogDescription>
-              Dodaj nowy projekt do organizacji plików do przeglądu
+              Utwórz projekt, aby dodać pliki i uruchomić przegląd
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateProject}>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Nazwa Projektu</Label>
+                <Label htmlFor="name">Nazwa projektu</Label>
                 <Input
                   id="name"
                   placeholder="Moja Aplikacja Web"
@@ -139,7 +139,7 @@ export function Projects() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description">Opis</Label>
+                <Label htmlFor="description">Opis (opcjonalnie)</Label>
                 <Textarea
                   id="description"
                   placeholder="Aplikacja React z backendem FastAPI"
@@ -158,7 +158,7 @@ export function Projects() {
                 Anuluj
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Tworzenie...' : 'Utwórz Projekt'}
+                {createMutation.isPending ? 'Tworzenie...' : 'Utwórz projekt'}
               </Button>
             </DialogFooter>
           </form>
@@ -169,9 +169,9 @@ export function Projects() {
         <EmptyState
           icon={FolderGit2}
           title="Brak projektów"
-          description="Zacznij od utworzenia pierwszego projektu, aby organizować i przeglądać kod z agentami AI"
+          description="Utwórz pierwszy projekt, aby dodać pliki i rozpocząć analizę"
           action={{
-            label: 'Utwórz Pierwszy Projekt',
+            label: 'Utwórz pierwszy projekt',
             onClick: () => setIsCreating(true),
           }}
         />

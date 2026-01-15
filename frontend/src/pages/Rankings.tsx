@@ -48,8 +48,8 @@ export function Rankings() {
         <div className="flex items-center gap-3">
           <Trophy className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-3xl font-bold">Rankingi Arena</h1>
-            <p className="text-muted-foreground">Rankingi zespolow AI na podstawie glosow w trybie Arena</p>
+            <h1 className="text-3xl font-bold">Rankingi Areny</h1>
+            <p className="text-muted-foreground">Ranking zespołów AI oparty o głosy w trybie Areny</p>
           </div>
         </div>
       </div>
@@ -60,11 +60,11 @@ export function Rankings() {
           <div className="flex items-start gap-3">
             <Swords className="h-5 w-5 text-blue-600 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-blue-900 mb-1">Jak dzialaja rankingi?</p>
+              <p className="font-medium text-blue-900 mb-1">Jak działają rankingi?</p>
               <p className="text-blue-700">
-                Rankingi sa oparte na systemie ELO. Kazdy zespol (unikalna konfiguracja 4 agentow)
-                rozpoczyna z ratingiem 1500. Wygrana zwieksza rating, przegrana go zmniejsza.
-                Tylko glosy z trybu Arena wplywaja na ranking - tryb Council nie ma wplywu na statystyki.
+                Rankingi bazują na ELO. Każdy zespół (unikalna konfiguracja ról i modeli)
+                startuje od 1500. Wygrana podnosi rating, przegrana go obniża.
+                Tylko głosy z Areny wpływają na ranking.
               </p>
             </div>
           </div>
@@ -76,10 +76,10 @@ export function Rankings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Ranking Zespolow
+            Ranking zespołów
           </CardTitle>
           <CardDescription>
-            Zespoly posortowane wedlug ratingu ELO (najlepsze na gorze)
+            Zespoły posortowane według ELO (najlepsze na górze)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -96,10 +96,10 @@ export function Rankings() {
             <div className="text-center py-12">
               <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">
-                Brak danych rankingowych. Uruchom sesje Arena i zaglosuj, aby zbudowac rankingi!
+                Brak danych rankingowych. Uruchom sesję Areny i zagłosuj, aby zbudować ranking.
               </p>
               <p className="text-sm text-muted-foreground mt-2">
-                Rankingi sa budowane wylacznie na podstawie glosow w trybie Arena.
+                Rankingi są budowane wyłącznie na podstawie głosów w trybie Areny.
               </p>
             </div>
           ) : (

@@ -216,7 +216,7 @@ export function ReviewDetail() {
   }
 
   if (!review) {
-    return <div className="text-center py-12">Przegląd nie znaleziony</div>;
+    return <div className="text-center py-12">Nie znaleziono przeglądu</div>;
   }
 
   // Raport moderatora z review.summary (nowy flow)
@@ -262,12 +262,12 @@ export function ReviewDetail() {
         <Link to={`/projects/${review.project_id}`}>
           <Button variant="ghost" size="sm" className="mb-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Powrót do Projektu
+            Powrót do projektu
           </Button>
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Przegląd Kodu #{review.id}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Przegląd kodu #{review.id}</h1>
             <p className="text-muted-foreground">
               {project?.name} - {new Date(review.created_at).toLocaleString()}
             </p>
@@ -284,7 +284,7 @@ export function ReviewDetail() {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Radio className="h-5 w-5 text-primary animate-pulse" />
-              Przegląd w trakcie...
+              Przegląd w toku...
               {isConnected && (
                 <Badge variant="outline" className="ml-2 text-xs">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></span>
@@ -293,7 +293,7 @@ export function ReviewDetail() {
               )}
             </CardTitle>
             <CardDescription>
-              Agenci AI analizują Twój kod w czasie rzeczywistym
+              Agenci analizują kod w czasie rzeczywistym
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -432,7 +432,7 @@ export function ReviewDetail() {
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Bot className="h-5 w-5" />
-                  Odpowiedzi Agentów ({agents.length})
+                  Odpowiedzi agentów ({agents.length})
                 </CardTitle>
                 <CardDescription>
                   Kliknij, aby zobaczyć szczegółowe odpowiedzi każdego agenta
@@ -517,7 +517,7 @@ export function ReviewDetail() {
           <TabsTrigger value="issues">Problemy ({issues?.length || 0})</TabsTrigger>
           <TabsTrigger value="discussions" className="flex items-center gap-1">
             <MessageSquare className="h-4 w-4" />
-            Dyskusje AI
+            Dyskusje i debaty
           </TabsTrigger>
           <TabsTrigger value="files">Pliki ({project?.files?.length || 0})</TabsTrigger>
         </TabsList>
@@ -528,7 +528,7 @@ export function ReviewDetail() {
             <CardContent className="pt-4">
               <div className="flex flex-wrap gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Poziom Ważności</label>
+                  <label className="text-sm font-medium">Poziom ważności</label>
                   <div className="flex gap-2">
                     <Button variant={severityFilter === '' ? 'default' : 'outline'} size="sm" onClick={() => setSeverityFilter('')}>Wszystkie</Button>
                     <Button variant={severityFilter === 'error' ? 'default' : 'outline'} size="sm" onClick={() => setSeverityFilter('error')} className="text-red-600">Błędy ({errorCount})</Button>
@@ -593,10 +593,10 @@ export function ReviewDetail() {
                               variant="outline"
                               size="sm"
                               onClick={(e) => startArenaDebate(e)}
-                              title="Zobacz dyskusję AI o review"
+                              title="Zobacz debatę i uzasadnienia"
                             >
                               <MessageSquare className="h-3 w-3 mr-1" />
-                              Dyskusja
+                              Otwórz debatę
                             </Button>
                             <Button variant="ghost" size="sm">
                               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

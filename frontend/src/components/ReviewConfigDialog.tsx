@@ -424,10 +424,10 @@ export function ReviewConfigDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Bot className="h-6 w-6" />
-            Konfiguracja Code Review
+            Konfiguracja przeglądu
           </DialogTitle>
           <DialogDescription>
-            Wybierz agentów AI i modele do analizy Twojego kodu
+            Ustaw tryb, role agentów i modele, które mają analizować Twój kod
           </DialogDescription>
         </DialogHeader>
 
@@ -476,12 +476,12 @@ export function ReviewConfigDialog({
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Users className="h-6 w-6 text-blue-500" />
-                    <CardTitle>Tryb Rady (Council)</CardTitle>
+                    <CardTitle>Tryb Rady</CardTitle>
                     {config.mode === 'council' && <Badge>Wybrany</Badge>}
                   </div>
                   <CardDescription>
-                    Jeden zespół 4 agentów analizuje kod. Moderator podsumowuje konsensus.
-                    Ten tryb NIE wpływa na rankingi.
+                    Jeden zespół analizuje kod i dochodzi do wspólnego wniosku.
+                    Ten tryb nie wpływa na rankingi.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -501,12 +501,12 @@ export function ReviewConfigDialog({
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Swords className="h-6 w-6 text-red-500" />
-                    <CardTitle>Tryb Areny (Arena)</CardTitle>
+                    <CardTitle>Tryb Areny</CardTitle>
                     {config.mode === 'arena' && <Badge>Wybrany</Badge>}
                   </div>
                   <CardDescription>
-                    Dwa zespoły (A i B) niezależnie analizują kod. Po zakończeniu głosujesz,
-                    który zespół dał lepsze wyniki. Głosy budują ranking ELO.
+                    Dwa zespoły analizują ten sam kod. Po zakończeniu wybierasz lepsze wyniki.
+                    Głosy budują ranking ELO.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -526,7 +526,7 @@ export function ReviewConfigDialog({
             <TabsContent value="agents" className="space-y-4 mt-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  Każdy agent analizuje kod z innej perspektywy. Możesz wybrać różne modele AI dla każdego.
+                  Każda rola odpowiada za inną perspektywę. Możesz przypisać osobne modele.
                 </p>
                 <Link to="/settings" onClick={() => onOpenChange(false)}>
                   <Button variant="outline" size="sm" className="gap-2">

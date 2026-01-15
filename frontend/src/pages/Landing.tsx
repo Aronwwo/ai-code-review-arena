@@ -39,13 +39,13 @@ export function Landing() {
       <section className="container mx-auto px-4 py-20 text-center">
         <div className="max-w-3xl mx-auto space-y-6">
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight">
-            Wieloagentowy przegląd kodu AI
+            Wieloagentowy przegląd kodu
             <br />
-            <span className="text-primary">Napędzany lokalnymi modelami LLM</span>
+            <span className="text-primary">z czytelnym raportem i rankingami</span>
           </h1>
           <p className="text-xl text-muted-foreground">
-            Wgraj swój kod i uzyskaj kompleksowe przeglądy od wyspecjalizowanych agentów AI.
-            Obserwuj ich debaty w trybie Rady lub Areny. 100% darmowy i lokalny z Ollama.
+            Wgraj kod, wybierz tryb Rady lub Areny i porównuj wyniki zespołów AI.
+            Działa lokalnie z Ollama albo zewnętrznymi providerami.
           </p>
           <div className="flex gap-4 justify-center pt-4">
             <Link to="/register">
@@ -65,56 +65,52 @@ export function Landing() {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4">Funkcje</h2>
+          <h2 className="text-3xl font-bold mb-4">Najważniejsze funkcje</h2>
           <p className="text-muted-foreground">
-            Wszystko, czego potrzebujesz do profesjonalnego przeglądu kodu z AI
+            Przejrzysty proces od wgrania kodu po końcowy raport i ranking
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <Bot className="h-10 w-10 text-primary mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Wieloagentowy przegląd</h3>
+            <h3 className="text-xl font-semibold mb-2">Wieloagentowa analiza</h3>
             <p className="text-muted-foreground">
-              Wyspecjalizowani agenci analizują kod z różnych perspektyw: Ogólnej, Bezpieczeństwa,
-              Wydajności i Stylu.
+              Cztery role: ogólny, bezpieczeństwo, wydajność i styl. Każda rola ma własny model.
             </p>
           </Card>
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <MessageSquare className="h-10 w-10 text-primary mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Konwersacje agentów</h3>
+            <h3 className="text-xl font-semibold mb-2">Tryby Rady i Areny</h3>
             <p className="text-muted-foreground">
-              Tryb Rady dla wspólnej dyskusji lub Tryb Areny dla debaty oskarżyciel vs obrońca
-              z werdyktem moderatora.
+              Rada: jeden zespół i konsensus. Arena: dwa zespoły i głosowanie użytkownika.
             </p>
           </Card>
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <Shield className="h-10 w-10 text-primary mb-4" />
             <h3 className="text-xl font-semibold mb-2">Bezpieczny i prywatny</h3>
             <p className="text-muted-foreground">
-              Autoryzacja JWT, limitowanie zapytań, walidacja danych. Twój kod pozostaje na Twoim
-              komputerze z lokalnymi LLM.
+              Logowanie w oparciu o cookies, CSRF i rate‑limit. Kod zostaje u Ciebie.
             </p>
           </Card>
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <Zap className="h-10 w-10 text-primary mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Darmowy i lokalny</h3>
+            <h3 className="text-xl font-semibold mb-2">Elastyczni providerzy</h3>
             <p className="text-muted-foreground">
-              Działa z Ollama, darmowym Groq, Gemini lub całkowicie offline. Bez kosztownych API.
+              Mock do testów, Ollama lokalnie lub zewnętrzne API. Zmieniasz w ustawieniach.
             </p>
           </Card>
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <Code className="h-10 w-10 text-primary mb-4" />
             <h3 className="text-xl font-semibold mb-2">Nowoczesny interfejs</h3>
             <p className="text-muted-foreground">
-              Zbudowany z React, TypeScript, TailwindCSS i shadcn/ui dla profesjonalnego wyglądu.
+              Szybki UI z React + Tailwind, czytelne karty i filtry wyników.
             </p>
           </Card>
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <FileSearch className="h-10 w-10 text-primary mb-4" />
             <h3 className="text-xl font-semibold mb-2">Kompleksowe wyniki</h3>
             <p className="text-muted-foreground">
-              Filtruj i sortuj problemy według ważności i kategorii. Przeglądaj szczegółowe
-              rekomendacje i fragmenty kodu.
+              Filtry, szczegóły problemów i podsumowanie moderatora w jednym miejscu.
             </p>
           </Card>
         </div>
@@ -124,7 +120,7 @@ export function Landing() {
       <section className="container mx-auto px-4 py-16 bg-muted/30 rounded-lg">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold mb-4">Jak to działa</h2>
-          <p className="text-muted-foreground">Zacznij w czterech prostych krokach</p>
+          <p className="text-muted-foreground">Cztery kroki do pełnego raportu</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="p-6 text-center">
@@ -132,9 +128,9 @@ export function Landing() {
               1
             </div>
             <Upload className="h-8 w-8 mx-auto mb-3 text-primary" />
-            <h3 className="text-lg font-semibold mb-2">Wgraj kod</h3>
+            <h3 className="text-lg font-semibold mb-2">Dodaj pliki</h3>
             <p className="text-sm text-muted-foreground">
-              Utwórz projekt i wgraj pliki z kodem
+              Utwórz projekt i dodaj pliki do analizy
             </p>
           </Card>
           <Card className="p-6 text-center">
@@ -142,9 +138,9 @@ export function Landing() {
               2
             </div>
             <Play className="h-8 w-8 mx-auto mb-3 text-primary" />
-            <h3 className="text-lg font-semibold mb-2">Uruchom przegląd</h3>
+            <h3 className="text-lg font-semibold mb-2">Wybierz tryb</h3>
             <p className="text-sm text-muted-foreground">
-              Wybierz tryb Rady lub Areny i wybierz agentów
+              Rada dla konsensusu lub Arena dla porównania
             </p>
           </Card>
           <Card className="p-6 text-center">
@@ -152,9 +148,9 @@ export function Landing() {
               3
             </div>
             <Bot className="h-8 w-8 mx-auto mb-3 text-primary" />
-            <h3 className="text-lg font-semibold mb-2">Analiza AI</h3>
+            <h3 className="text-lg font-semibold mb-2">Analiza agentów</h3>
             <p className="text-sm text-muted-foreground">
-              Agenci analizują i dyskutują o Twoim kodzie
+              Każdy agent odpowiada za swoją rolę
             </p>
           </Card>
           <Card className="p-6 text-center">
@@ -162,9 +158,9 @@ export function Landing() {
               4
             </div>
             <CheckCircle className="h-8 w-8 mx-auto mb-3 text-primary" />
-            <h3 className="text-lg font-semibold mb-2">Zobacz wyniki</h3>
+            <h3 className="text-lg font-semibold mb-2">Raport i ranking</h3>
             <p className="text-sm text-muted-foreground">
-              Otrzymaj szczegółowe problemy, rekomendacje i wnioski
+              Przeglądaj problemy, podsumowanie i rankingi zespołów
             </p>
           </Card>
         </div>
@@ -180,7 +176,7 @@ export function Landing() {
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a
-                href="http://localhost:8080/docs"
+                href="http://localhost:8000/docs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-foreground transition-colors"
