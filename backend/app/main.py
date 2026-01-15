@@ -107,6 +107,8 @@ async def rate_limit_middleware(request: Request, call_next):
 
     # CSRF protection for cookie-based auth
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        if request.url.path.startswith("/auth/"):
+            return await call_next(request)
         auth_header = request.headers.get("Authorization")
         access_cookie = request.cookies.get("access_token")
         if access_cookie and not auth_header:
