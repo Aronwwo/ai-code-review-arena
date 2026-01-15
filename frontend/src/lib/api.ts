@@ -7,14 +7,23 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
-// Request interceptor to add auth token
+const getCookie = (name: string): string | null => {
+  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[2]) : null;
+};
+
+// Request interceptor to add CSRF token for unsafe methods
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const method = (config.method || 'get').toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      const csrfToken = getCookie('csrf_token');
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken;
+      }
     }
     return config;
   },
@@ -28,11 +37,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
-
       // Redirect to login if not already there
       if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
         window.location.href = '/login';

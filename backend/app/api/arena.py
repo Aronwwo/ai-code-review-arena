@@ -120,10 +120,17 @@ async def create_arena_session(
                     status_code=422,
                     detail=f"Zespół {team_name}, rola {role}: konfiguracja musi być obiektem"
                 )
-            if "provider" not in agent_config or "model" not in agent_config:
+            provider = agent_config.get("provider")
+            model = agent_config.get("model")
+            if provider is None or model is None:
                 raise HTTPException(
                     status_code=422,
                     detail=f"Zespół {team_name}, rola {role}: wymagane pola 'provider' i 'model'"
+                )
+            if not isinstance(provider, str) or not provider.strip() or not isinstance(model, str) or not model.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Zespół {team_name}, rola {role}: provider i model nie mogą być puste"
                 )
 
     # Utwórz sesję

@@ -31,14 +31,14 @@ export function Rankings() {
   };
 
   const formatTeamConfig = (config: TeamRating['config']) => {
-    if (!config) return 'Brak konfiguracji';
-    const models = new Set<string>();
-    for (const roleConfig of Object.values(config)) {
-      if (roleConfig && typeof roleConfig === 'object' && 'model' in roleConfig) {
-        models.add(String(roleConfig.model));
-      }
-    }
-    return Array.from(models).join(', ');
+    if (!config) return ['Brak konfiguracji'];
+    const roles = ['general', 'security', 'performance', 'style'];
+    return roles.map((role) => {
+      const roleConfig = config[role as keyof typeof config] as { provider?: string; model?: string } | undefined;
+      const provider = roleConfig?.provider || 'brak';
+      const model = roleConfig?.model || 'brak';
+      return `${role}: ${provider}/${model}`;
+    });
   };
 
   return (
@@ -121,9 +121,11 @@ export function Rankings() {
                       </Badge>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      <span className="font-mono text-xs">
-                        {formatTeamConfig(team.config)}
-                      </span>
+                      <div className="font-mono text-xs space-y-1">
+                        {formatTeamConfig(team.config).map((line) => (
+                          <div key={line}>{line}</div>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
                       <span className="text-green-600">{team.wins}W</span>

@@ -5,24 +5,17 @@ import { User, LoginRequest, RegisterRequest } from '@/types';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [token] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch current user from API
-  const fetchCurrentUser = useCallback(async (authToken: string) => {
+  const fetchCurrentUser = useCallback(async () => {
     try {
-      // Set token in header for this request
-      const response = await api.get('/auth/me', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const response = await api.get('/auth/me');
       setUser(response.data);
-      localStorage.setItem('user', JSON.stringify(response.data));
       return response.data;
     } catch (error) {
-      // Token invalid or expired - silently clear auth state
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setToken(null);
+      // Not authenticated - silently clear auth state
       setUser(null);
       return null;
     }
@@ -31,13 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Initialize auth state on mount
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = localStorage.getItem('token');
-
-      if (storedToken) {
-        setToken(storedToken);
-        await fetchCurrentUser(storedToken);
-      }
-
+      await fetchCurrentUser();
       setIsLoading(false);
     };
 
@@ -45,16 +32,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchCurrentUser]);
 
   const login = async (credentials: LoginRequest) => {
-    const response = await api.post('/auth/login', credentials);
-    const { access_token, refresh_token } = response.data;
-
-    // Store tokens
-    localStorage.setItem('token', access_token);
-    localStorage.setItem('refresh_token', refresh_token);
-    setToken(access_token);
-
-    // Fetch actual user data from API
-    await fetchCurrentUser(access_token);
+    await api.post('/auth/login', credentials);
+    await fetchCurrentUser();
   };
 
   const register = async (data: RegisterRequest) => {
@@ -63,18 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await login({ email: data.email, password: data.password });
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    setToken(null);
+  const logout = async () => {
+    await api.post('/auth/logout');
     setUser(null);
   };
 
   const refreshUser = async () => {
-    if (token) {
-      await fetchCurrentUser(token);
-    }
+    await fetchCurrentUser();
   };
 
   return (
@@ -87,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         refreshUser,
-        isAuthenticated: !!token && !!user,
+        isAuthenticated: !!user,
       }}
     >
       {children}

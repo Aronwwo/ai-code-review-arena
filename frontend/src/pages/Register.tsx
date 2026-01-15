@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { toast } from 'sonner';
 import { Bot, ArrowLeft } from 'lucide-react';
 import { parseApiError } from '@/lib/errorParser';
-import { validatePassword, validateEmail } from '@/lib/validation';
+import { validatePassword, validateEmail, validateUsername } from '@/lib/validation';
 
 export function Register() {
   const [email, setEmail] = useState('');
@@ -25,6 +25,13 @@ export function Register() {
     // Validate email
     if (!validateEmail(email)) {
       toast.error('Nieprawidłowy format adresu email');
+      return;
+    }
+
+    // Validate username
+    const usernameCheck = validateUsername(username);
+    if (!usernameCheck.valid) {
+      toast.error(`Nazwa użytkownika: ${usernameCheck.error}`);
       return;
     }
 

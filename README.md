@@ -108,6 +108,9 @@ programowaniewint/
 
 - `POST /auth/register` - rejestracja
 - `POST /auth/login` - logowanie
+- `POST /auth/logout` - wylogowanie (czyści ciasteczka)
+- `POST /auth/refresh` - odśwież tokeny (cookies lub body)
+- `GET /auth/me` - bieżący użytkownik
 - `GET /projects` - lista projektow
 - `POST /projects` - nowy projekt
 - `POST /projects/{id}/files` - dodaj plik
@@ -115,6 +118,14 @@ programowaniewint/
 - `GET /reviews/{id}` - szczegoly przegladu
 
 Pelna dokumentacja API: http://localhost:8000/docs
+
+## Auth i CSRF (nowy flow)
+
+- Logowanie ustawia **httpOnly cookies**: `access_token` i `refresh_token`.
+- Frontend wysyła **CSRF token** w nagłówku `X-CSRF-Token` dla metod POST/PUT/PATCH/DELETE.
+- CSRF jest przechowywany w ciasteczku `csrf_token` (dostępne dla JS).
+
+W praktyce nic nie musisz konfigurować – axios ma `withCredentials: true`.
 
 ## Testy
 

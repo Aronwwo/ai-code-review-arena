@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { toast } from 'sonner';
 import { Bot, ArrowLeft } from 'lucide-react';
 import { parseApiError } from '@/lib/errorParser';
+import { validateEmail } from '@/lib/validation';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -18,6 +19,12 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateEmail(email)) {
+      toast.error('Nieprawidłowy format adresu email');
+      return;
+    }
+
     setIsLoading(true);
 
     try {

@@ -1,11 +1,21 @@
 """Authentication API endpoints."""
 import logging
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+import secrets
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlmodel import Session, select
 from app.database import get_session
 from app.models.user import User, UserCreate, UserLogin, UserRead, Token, TokenWithRefresh, RefreshTokenRequest, PasswordChange
-from app.utils.auth import hash_password, verify_password, create_access_token, create_refresh_token, decode_refresh_token
+from app.utils.auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+)
+from app.config import settings
 from app.utils.audit import log_audit_event, get_client_ip, get_user_agent
 from app.utils.rate_limit import check_rate_limit
 from app.models.audit import AuditAction
@@ -37,6 +47,39 @@ def validate_email_format(email: str) -> bool:
     """Validate email format."""
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, email))
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> str:
+    csrf_token = secrets.token_urlsafe(32)
+    secure = settings.is_production
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
+    )
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=secure,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
+    )
+    return csrf_token
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -115,7 +158,12 @@ async def register(user_data: UserCreate, request: Request, session: Session = D
 
 
 @router.post("/login", response_model=TokenWithRefresh)
-async def login(credentials: UserLogin, request: Request, session: Session = Depends(get_session)):
+async def login(
+    credentials: UserLogin,
+    request: Request,
+    response: Response,
+    session: Session = Depends(get_session)
+):
     """Login and get access and refresh tokens.
 
     Rate limited to 5 attempts per minute per IP address to prevent brute force attacks.
@@ -158,18 +206,25 @@ async def login(credentials: UserLogin, request: Request, session: Session = Dep
         request=request,
     )
 
+    _set_auth_cookies(response, access_token, refresh_token)
     return TokenWithRefresh(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/refresh", response_model=TokenWithRefresh)
 async def refresh_tokens(
-    refresh_request: RefreshTokenRequest,
     request: Request,
-    session: Session = Depends(get_session)
+    response: Response,
+    session: Session = Depends(get_session),
+    refresh_request: RefreshTokenRequest | None = None,
 ):
     """Refresh access token using refresh token."""
     # Decode refresh token
-    payload = decode_refresh_token(refresh_request.refresh_token)
+    refresh_token = None
+    if refresh_request:
+        refresh_token = refresh_request.refresh_token
+    if not refresh_token:
+        refresh_token = request.cookies.get("refresh_token")
+    payload = decode_refresh_token(refresh_token) if refresh_token else None
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -206,7 +261,17 @@ async def refresh_tokens(
         request=request,
     )
 
+    _set_auth_cookies(response, access_token, refresh_token)
     return TokenWithRefresh(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear auth cookies."""
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+    response.delete_cookie("csrf_token", path="/")
+    return {"detail": "Logged out"}
 
 
 @router.get("/me", response_model=UserRead)

@@ -69,6 +69,26 @@ class UserCreate(SQLModel):
         """Validate email format using shared validation function."""
         return validate_email_format(v)
 
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        """Validate username format (letters, numbers, ._-)."""
+        if not re.match(r'^[a-zA-Z0-9._-]{3,30}$', v):
+            raise ValueError("nieprawidłowa nazwa użytkownika")
+        return v
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        """Validate password strength (uppercase, lowercase, digit)."""
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("hasło musi zawierać wielką literę")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("hasło musi zawierać małą literę")
+        if not re.search(r"\d", v):
+            raise ValueError("hasło musi zawierać cyfrę")
+        return v
+
 
 class UserLogin(SQLModel):
     """Schema for user login."""
@@ -128,3 +148,15 @@ class PasswordChange(SQLModel):
 
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=8, max_length=100)
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password_strength(cls, v: str) -> str:
+        """Validate new password strength (uppercase, lowercase, digit)."""
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("hasło musi zawierać wielką literę")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("hasło musi zawierać małą literę")
+        if not re.search(r"\d", v):
+            raise ValueError("hasło musi zawierać cyfrę")
+        return v

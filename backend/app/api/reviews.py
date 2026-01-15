@@ -133,6 +133,11 @@ async def create_review(
             config = review_data.agent_configs[role]
             provider = config.provider
             model = config.model
+            if not provider or not provider.strip() or not model or not model.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Rola '{role}': provider i model nie mogą być puste"
+                )
         else:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

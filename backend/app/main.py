@@ -105,6 +105,19 @@ async def rate_limit_middleware(request: Request, call_next):
             content={"detail": str(e.detail) if hasattr(e, 'detail') else "Rate limit exceeded"}
         )
 
+    # CSRF protection for cookie-based auth
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        auth_header = request.headers.get("Authorization")
+        access_cookie = request.cookies.get("access_token")
+        if access_cookie and not auth_header:
+            csrf_header = request.headers.get("X-CSRF-Token")
+            csrf_cookie = request.cookies.get("csrf_token")
+            if not csrf_header or not csrf_cookie or csrf_header != csrf_cookie:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF token missing or invalid"}
+                )
+
     # Wszystko OK - kontynuuj do endpointu
     response = await call_next(request)
     return response
