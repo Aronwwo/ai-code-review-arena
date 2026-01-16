@@ -77,12 +77,21 @@ export function ReviewDetail() {
         queryClient.invalidateQueries({ queryKey: ['issues', id] });
       } else if (event.type === 'review_completed') {
         toast.success('Przegląd zakończony!');
+        // Wait a bit for backend to finish processing, then refetch
+        setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['review', id] });
         queryClient.invalidateQueries({ queryKey: ['issues', id] });
         queryClient.invalidateQueries({ queryKey: ['agents', id] });
+          // Force refetch to ensure we get latest data
+          queryClient.refetchQueries({ queryKey: ['agents', id] });
+        }, 500);
       } else if (event.type === 'review_failed') {
         toast.error(`Przegląd nie powiódł się: ${event.error}`);
+        setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['review', id] });
+          queryClient.invalidateQueries({ queryKey: ['agents', id] });
+          queryClient.refetchQueries({ queryKey: ['agents', id] });
+        }, 500);
       }
     },
   });
@@ -115,7 +124,50 @@ export function ReviewDetail() {
       return response.data;
     },
     enabled: !!id,
+    // Refetch agents when review status changes to ensure we have latest data
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const reviewStatus = review?.status;
+      // Auto-refetch while review is running or pending
+      if (reviewStatus === 'running' || reviewStatus === 'pending') {
+        return 2000; // Refetch every 2 seconds
+      }
+      // After review completes, refetch once more to get final agent responses
+      if (reviewStatus === 'completed' || reviewStatus === 'failed') {
+        return false; // Stop auto-refetching after completion
+      }
+      return false;
+    },
   });
+
+  // Refetch agents when review status changes from running to completed/failed
+  useEffect(() => {
+    if (review?.status === 'completed' || review?.status === 'failed') {
+      // Wait a bit for backend to finish processing, then refetch agents
+      const timer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['agents', id] });
+        // Force immediate refetch to get latest agent data
+        queryClient.refetchQueries({ queryKey: ['agents', id] });
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [review?.status, id, queryClient]);
+
+  // Also refetch agents periodically while review is running or just completed
+  useEffect(() => {
+    if (!id) return;
+    
+    const interval = setInterval(() => {
+      if (review?.status === 'running' || review?.status === 'pending') {
+        queryClient.refetchQueries({ queryKey: ['agents', id] });
+      } else if (review?.status === 'completed' || review?.status === 'failed') {
+        // After completion, refetch once more after a delay to ensure all data is saved
+        queryClient.refetchQueries({ queryKey: ['agents', id] });
+      }
+    }, 3000); // Refetch every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [id, review?.status, queryClient]);
 
   // Query for conversations (used by ConversationView component internally)
   const { data: _conversations } = useQuery<ConversationSummary[]>({
@@ -219,10 +271,88 @@ export function ReviewDetail() {
     return <div className="text-center py-12">Nie znaleziono przeglądu</div>;
   }
 
+  // Helper to check if text contains placeholders
+  // Only check for FULL placeholder phrases, not individual words
+  const containsPlaceholders = (text: string): boolean => {
+    if (!text || text.length < 20) return false; // Too short to be a real placeholder issue
+    
+    const textLower = text.toLowerCase();
+    
+    // Strong indicators - these are almost certainly placeholders (exact phrases)
+    const strongPatterns = [
+      'po polsku',  // Only if exact phrase appears (not "odpowiedz po polsku" which is valid)
+      'wypełnij',
+      'krótki tytuł',
+      'szczegółowy opis po polsku',
+      'opcjonalne podsumowanie',
+      'ogólne podsumowanie przeglądu kodu',
+      'sugestia naprawy po polsku',
+      'opcjonalna sugestia poprawki po polsku',
+      '"info" | "warning"',  // Example syntax from prompts
+      '| "warning" | "error"',  // Example syntax
+      'rzeczywisty tytuł problemu',  // Full phrase from prompt
+      'rzeczywiste podsumowanie przeglądu kodu',  // Full phrase from prompt
+      'szczegółowy opis znalezionego problemu po polsku',  // Full phrase from prompt
+      'code_snippet': "fragment kodu',  // Placeholder in JSON
+      'suggested_fix': "sugestia naprawy',  // Placeholder in JSON
+    ];
+    
+    for (const pattern of strongPatterns) {
+      if (textLower.includes(pattern)) {
+        return true;
+      }
+    }
+    
+    // Weak indicators - check context (must appear together with context words)
+    const weakPatterns = [
+      { word: 'rzeczywisty', context: ['tytuł', 'problem', 'podsumowanie', 'opis'] },
+      { word: 'rzeczywiste', context: ['podsumowanie', 'dane'] },
+    ];
+    
+    for (const { word, context } of weakPatterns) {
+      if (textLower.includes(word)) {
+        // Check if word appears with context words nearby
+        for (const ctx of context) {
+          if (textLower.includes(ctx)) {
+            const wordPos = textLower.indexOf(word);
+            const ctxPos = textLower.indexOf(ctx);
+            if (wordPos !== -1 && ctxPos !== -1) {
+              const distance = Math.abs(wordPos - ctxPos);
+              // If words are very close together (within 50 chars), it's likely a placeholder
+              if (distance < 50) {
+                // But check if it's part of a longer, valid sentence
+                const contextBefore = textLower.substring(Math.max(0, wordPos - 20), wordPos);
+                const contextAfter = textLower.substring(wordPos + word.length, Math.min(textLower.length, wordPos + word.length + 20));
+                // If surrounded by actual content, it's probably valid
+                if (contextBefore.trim().length > 5 && contextAfter.trim().length > 5) {
+                  continue; // Skip this match - probably valid text
+                }
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
+  };
+
   // Raport moderatora z review.summary (nowy flow)
   const moderatorSummaryText = review?.summary || null;
   const parseModeratorSummary = (raw: string | null) => {
     if (!raw) return { text: null, summary: null, overallQuality: null, issues: null };
+    
+    // Check if it's an error message
+    if (raw.trim().startsWith('[BŁĄD]') || raw.trim().startsWith('[ERROR]')) {
+      return { text: raw, summary: null, overallQuality: null, issues: null };
+    }
+    
+    // Check for placeholders in raw text
+    if (containsPlaceholders(raw)) {
+      return { text: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
+    }
+    
     const cleaned = raw
       .trim()
       .replace(/^```json\s*/i, '')
@@ -232,19 +362,140 @@ export function ReviewDetail() {
 
     try {
       const data = JSON.parse(cleaned);
+      
+      // Check parsed data for placeholders
       const summary = typeof data.summary === 'string' ? data.summary : null;
+      if (summary && containsPlaceholders(summary)) {
+        return { text: '[BŁĄD] Podsumowanie zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
+      }
+      
       const overallQuality = typeof data.overall_quality === 'string' ? data.overall_quality : null;
-      const issues = Array.isArray(data.issues) ? data.issues : null;
+      const issues = Array.isArray(data.issues) 
+        ? data.issues.filter((issue: any) => {
+            const title = issue.title || '';
+            const desc = issue.description || '';
+            return !containsPlaceholders(title) && !containsPlaceholders(desc);
+          })
+        : null;
+      
       if (summary || overallQuality || issues) {
         return { text: null, summary, overallQuality, issues };
       }
     } catch {
-      // Fallback to raw text
+      // Fallback - check if it looks like JSON with placeholders
+      if (cleaned.includes('PO POLSKU') || cleaned.includes('po polsku') || 
+          cleaned.includes('"info" | "warning"') || cleaned.includes('| "warning" | "error"')) {
+        return { text: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
+      }
     }
 
-    return { text: cleaned, summary: null, overallQuality: null, issues: null };
+    // Don't return raw JSON if it looks like a template
+    if (cleaned.includes('"info" | "warning"') || cleaned.includes('| "warning" | "error"')) {
+      return { text: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
+    }
+
+    return { text: null, summary: null, overallQuality: null, issues: null };
   };
   const moderatorParsed = parseModeratorSummary(moderatorSummaryText);
+
+  // Helper to parse agent raw_output
+  const parseAgentResponse = (rawOutput: string | null) => {
+    if (!rawOutput || !rawOutput.trim()) {
+      return { summary: 'Brak odpowiedzi', issues: [] };
+    }
+    
+    // Clean markdown code blocks first
+    let cleanedOutput = rawOutput.trim();
+    
+    // Remove markdown code block fences more thoroughly
+    if (cleanedOutput.startsWith('```json')) {
+      cleanedOutput = cleanedOutput.replace(/^```json\s*/i, '').trim();
+    } else if (cleanedOutput.startsWith('```')) {
+      cleanedOutput = cleanedOutput.replace(/^```\w*\s*/i, '').trim();
+    }
+    if (cleanedOutput.endsWith('```')) {
+      cleanedOutput = cleanedOutput.replace(/\s*```$/i, '').trim();
+    }
+    
+    // Check for placeholders in cleaned output (more lenient check)
+    // Only reject if we're VERY sure it's a placeholder
+    if (cleanedOutput.includes('"info" | "warning"') || 
+        cleanedOutput.includes('| "warning" | "error"') ||
+        cleanedOutput.includes('krótki tytuł po polsku') ||
+        cleanedOutput.includes('szczegółowy opis po polsku') ||
+        cleanedOutput.includes('sugestia naprawy po polsku')) {
+      return { summary: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', issues: [] };
+    }
+    
+    try {
+      // Try to parse as JSON
+      const data = JSON.parse(cleanedOutput);
+      
+      // Validate structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid JSON structure');
+      }
+      
+      // Extract summary
+      const summary = typeof data.summary === 'string' && data.summary.trim() 
+        ? data.summary.trim() 
+        : 'Brak podsumowania';
+      
+      // Check summary for placeholders (only strong matches)
+      if (summary.includes('"info" | "warning"') || 
+          summary.includes('krótki tytuł po polsku') ||
+          summary.includes('szczegółowy opis po polsku')) {
+        return { summary: '[BŁĄD] Podsumowanie zawiera placeholdery zamiast rzeczywistej analizy', issues: [] };
+      }
+      
+      // Filter and clean issues
+      const issues = Array.isArray(data.issues) 
+        ? data.issues
+            .map((issue: any) => {
+              // Clean empty or placeholder code_snippet/suggested_fix
+              if (issue.code_snippet && 
+                  (issue.code_snippet.trim() === '' || 
+                   issue.code_snippet.trim() === '1' ||
+                   issue.code_snippet.toLowerCase().includes('fragment kodu') ||
+                   issue.code_snippet.length < 10)) {
+                issue.code_snippet = undefined;
+              }
+              
+              if (issue.suggested_fix && 
+                  (issue.suggested_fix.trim() === '' || 
+                   issue.suggested_fix.trim() === '1' ||
+                   issue.suggested_fix.toLowerCase().includes('sugestia naprawy') ||
+                   issue.suggested_fix.length < 10)) {
+                issue.suggested_fix = undefined;
+              }
+              
+              return issue;
+            })
+            .filter((issue: any) => {
+              // Only filter out obvious placeholders in title/description
+              const title = (issue.title || '').toLowerCase();
+              const description = (issue.description || '').toLowerCase();
+              
+              return !title.includes('krótki tytuł po polsku') &&
+                     !description.includes('szczegółowy opis po polsku') &&
+                     !title.includes('"info" | "warning"');
+            })
+        : [];
+      
+      return { summary, issues };
+    } catch (e) {
+      console.error("Failed to parse agent JSON response:", e);
+      
+      // Fallback: check if it's just a plain text response
+      if (cleanedOutput.length > 50 && !cleanedOutput.includes('{') && !cleanedOutput.includes('[')) {
+        // Plain text response - not JSON
+        return { summary: cleanedOutput, issues: [] };
+      }
+      
+      // Last resort: return error message
+      return { summary: 'Nieprawidłowy format odpowiedzi (nie można sparsować JSON)', issues: [] };
+    }
+  };
 
   // Liczba agentów z timeout
   const timedOutAgents = agents?.filter(a => a.timed_out) || [];
@@ -374,7 +625,50 @@ export function ReviewDetail() {
       </div>
 
       {/* Moderator Summary - główny raport */}
-      {review.status === 'completed' && moderatorSummaryText && (
+      {review.status === 'completed' && moderatorSummaryText && (() => {
+        // Check if this is a "no agent responses" message (not a real moderator report)
+        const isNoAgentResponses = moderatorSummaryText.includes('Nie można przeprowadzić przeglądu kodu') ||
+                                   moderatorSummaryText.includes('brak odpowiedzi od agentów') ||
+                                   moderatorSummaryText.includes('nie można ocenić') && moderatorSummaryText.includes('brak odpowiedzi');
+        
+        // Check if summary contains placeholders or is an error
+        const isError = moderatorSummaryText?.startsWith('[BŁĄD]') || 
+                       moderatorSummaryText?.startsWith('[ERROR]');
+        
+        // If no agent responses, show as warning instead of moderator report
+        if (isNoAgentResponses) {
+          return (
+            <Card className="border-2 border-yellow-500/30 bg-yellow-500/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-yellow-600">
+                  <Bot className="h-5 w-5" />
+                  Uwaga: Brak odpowiedzi od agentów
+                </CardTitle>
+                <CardDescription>
+                  Przegląd nie mógł zostać przeprowadzony, ponieważ żaden z agentów nie zwrócił odpowiedzi.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 font-medium">
+                      {moderatorParsed.summary || moderatorSummaryText}
+                    </p>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>• Sprawdź logi backendu, aby zobaczyć szczegóły błędów</p>
+                    <p>• Sprawdź konfigurację API kluczy dla dostawców (Google Gemini, Groq, etc.)</p>
+                    <p>• Sprawdź, czy limity czasu nie są zbyt krótkie</p>
+                    <p>• Upewnij się, że dostawcy LLM są dostępni i działają poprawnie</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }
+        
+        // Regular moderator report
+        return (
         <Card className="border-2 border-primary/30 bg-primary/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -391,35 +685,127 @@ export function ReviewDetail() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              {moderatorParsed.summary || moderatorParsed.overallQuality || moderatorParsed.issues ? (
-                <div className="space-y-3">
+              {(() => {
+                if (isError) {
+                  return (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                      <p className="text-sm text-red-600 font-medium">{moderatorSummaryText}</p>
+                    </div>
+                  );
+                }
+              
+              // Check for placeholders in parsed data
+              const hasPlaceholders = moderatorParsed.summary && containsPlaceholders(moderatorParsed.summary);
+              
+              if (hasPlaceholders) {
+                return (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                    <p className="text-sm text-yellow-600 font-medium">
+                      [BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy
+                    </p>
+                  </div>
+                );
+              }
+              
+              // Display parsed content in readable format
+              return (
+                <div className="space-y-4">
                   {moderatorParsed.summary && (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    <div>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
                       {moderatorParsed.summary}
                     </p>
+                    </div>
                   )}
+                  
                   {moderatorParsed.overallQuality && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Ogólna jakość: </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Ogólna jakość:</span>
                       <Badge variant="secondary">{moderatorParsed.overallQuality}</Badge>
                     </div>
                   )}
-                  {moderatorParsed.issues && (
-                    <div className="text-sm text-muted-foreground">
+                  
+                  {moderatorParsed.issues && moderatorParsed.issues.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="text-sm font-semibold">
                       Wykryte problemy: {moderatorParsed.issues.length}
                     </div>
-                  )}
+                      <div className="space-y-2">
+                        {moderatorParsed.issues.map((issue: any, idx: number) => (
+                          <div key={idx} className="border-l-2 border-border pl-3 py-2 bg-background/50 rounded">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge 
+                                variant={
+                                  issue.severity === 'error' ? 'destructive' :
+                                  issue.severity === 'warning' ? 'warning' : 'default'
+                                }
+                                className="text-xs"
+                              >
+                                {issue.severity}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">{issue.category}</span>
+                            </div>
+                            <p className="text-sm font-medium">{issue.title}</p>
+                            {issue.description && (
+                              <p className="text-xs text-muted-foreground mt-1">{issue.description}</p>
+                            )}
+                            {issue.file_name && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                📄 {issue.file_name}
+                                {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
+                              </p>
+                            )}
+                            {issue.code_snippet && 
+                             issue.code_snippet.trim().length > 10 &&
+                             !issue.code_snippet.toLowerCase().includes('fragment kodu') &&
+                             issue.code_snippet.trim() !== '1' && (
+                              <div className="mt-2">
+                                <CodeViewer
+                                  code={issue.code_snippet}
+                                  language={issue.file_name ? (issue.file_name.split('.').pop() || 'python') : 'python'}
+                                  showLineNumbers={true}
+                                  filename="Fragment kodu"
+                                />
+                              </div>
+                            )}
+                            {issue.suggested_fix && 
+                             issue.suggested_fix.trim().length > 10 &&
+                             !issue.suggested_fix.toLowerCase().includes('sugestia naprawy') &&
+                             issue.suggested_fix.trim() !== '1' && (
+                              <div className="mt-2">
+                                <span className="text-xs font-semibold">💡 Sugestia poprawki: </span>
+                                {issue.suggested_fix.includes('\n') || issue.suggested_fix.length > 100 ? (
+                                  <div className="mt-1">
+                                    <CodeViewer
+                                      code={issue.suggested_fix}
+                                      language={issue.file_name ? (issue.file_name.split('.').pop() || 'python') : 'python'}
+                                      showLineNumbers={true}
+                                      filename="Sugerowany kod"
+                                    />
                 </div>
               ) : (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {moderatorParsed.text || moderatorSummaryText}
+                                  <span className="text-xs">{issue.suggested_fix}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!moderatorParsed.summary && !moderatorParsed.overallQuality && (!moderatorParsed.issues || moderatorParsed.issues.length === 0) && (
+                    <p className="text-sm text-muted-foreground italic">
+                      {moderatorSummaryText || 'Brak danych'}
                 </p>
               )}
             </div>
+              );
+              })()}
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {/* Agents - rozwijalna sekcja */}
       {agents && agents.length > 0 && (
@@ -495,13 +881,123 @@ export function ReviewDetail() {
                   </CardHeader>
                   {expandedAgents.has(agent.id) && (
                     <CardContent className="pt-0">
-                      {agent.raw_output ? (
-                        <div className="bg-muted/50 rounded-lg p-4 max-h-96 overflow-y-auto">
-                          <pre className="text-xs whitespace-pre-wrap font-mono">{agent.raw_output}</pre>
-                        </div>
-                      ) : (
+                      {(() => {
+                        // Check if raw_output exists and is not empty
+                        if (!agent.raw_output || !agent.raw_output.trim()) {
+                          return (
+                            <div className="space-y-2">
                         <p className="text-sm text-muted-foreground italic">Brak odpowiedzi</p>
-                      )}
+                              {agent.timed_out && (
+                                <p className="text-xs text-yellow-600">
+                                  Agent przekroczył limit czasu ({agent.timeout_seconds}s)
+                                </p>
+                              )}
+                              {!agent.timed_out && !agent.parsed_successfully && (
+                                <p className="text-xs text-red-600">
+                                  Agent nie zakończył się pomyślnie. Sprawdź logi backendu.
+                                </p>
+                              )}
+                        </div>
+                          );
+                        }
+                        
+                        const rawOutput = agent.raw_output.trim();
+                        
+                        // Check if raw_output is an error message
+                        const isError = rawOutput.startsWith('[BŁĄD]') || 
+                                       rawOutput.startsWith('[ERROR]') ||
+                                       rawOutput.startsWith('[TIMEOUT]') ||
+                                       rawOutput.startsWith('[EMPTY]');
+                        
+                        if (isError) {
+                          // Display error message directly with full details
+                          return (
+                            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 space-y-2">
+                              <p className="text-sm text-red-600 font-medium">{rawOutput}</p>
+                              {agent.timed_out && (
+                                <p className="text-xs text-yellow-600 mt-2">
+                                  ⏱️ Agent przekroczył limit czasu ({agent.timeout_seconds}s)
+                                </p>
+                              )}
+                              {!agent.timed_out && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  ℹ️ Sprawdź logi backendu, aby zobaczyć szczegóły błędu.
+                                </p>
+                              )}
+                              <details className="mt-2 text-xs text-muted-foreground">
+                                <summary className="cursor-pointer hover:text-foreground">Pokaż pełną odpowiedź</summary>
+                                <pre className="mt-2 p-2 bg-background/50 rounded border overflow-auto max-h-48">
+                                  {rawOutput}
+                                </pre>
+                              </details>
+                            </div>
+                          );
+                        }
+                        
+                        // Try to parse as JSON response
+                        const { summary, issues } = parseAgentResponse(rawOutput);
+                        return (
+                          <div className="bg-muted/50 rounded-lg p-4 max-h-96 overflow-y-auto space-y-3">
+                            {summary && <p className="text-sm font-medium">{summary}</p>}
+                            {issues.length > 0 && (
+                              <div className="space-y-2">
+                                <h5 className="text-sm font-semibold mt-2">Wykryte problemy:</h5>
+                                {issues.map((issue: any, idx: number) => (
+                                  <div key={idx} className="border-l-2 border-border pl-2">
+                                    <p className="text-sm font-medium">{issue.title}</p>
+                                    <p className="text-xs text-muted-foreground">{issue.description}</p>
+                                    {issue.file_name && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Plik: {issue.file_name} {issue.line_start && `linia ${issue.line_start}`}
+                                      </p>
+                                    )}
+                                    {issue.code_snippet && 
+                                     issue.code_snippet.trim().length > 10 &&
+                                     !issue.code_snippet.toLowerCase().includes('fragment kodu') &&
+                                     issue.code_snippet.trim() !== '1' && (
+                                      <div className="mt-2">
+                                        <CodeViewer
+                                          code={issue.code_snippet}
+                                          language={issue.file_name ? (issue.file_name.split('.').pop() || 'python') : 'python'}
+                                          showLineNumbers={true}
+                                          filename="Fragment kodu"
+                                        />
+                                      </div>
+                                    )}
+                                    {issue.suggested_fix && 
+                                     issue.suggested_fix.trim().length > 10 &&
+                                     !issue.suggested_fix.toLowerCase().includes('sugestia naprawy') &&
+                                     issue.suggested_fix.trim() !== '1' && (
+                                      <div className="mt-2">
+                                        <h6 className="text-xs font-semibold">Sugerowana poprawka:</h6>
+                                        {issue.suggested_fix.includes('\n') || issue.suggested_fix.length > 100 ? (
+                                          <CodeViewer
+                                            code={issue.suggested_fix}
+                                            language={issue.file_name ? (issue.file_name.split('.').pop() || 'python') : 'python'}
+                                            showLineNumbers={true}
+                                            filename="Sugerowany kod"
+                                          />
+                                        ) : (
+                                          <p className="text-xs text-muted-foreground mt-1">{issue.suggested_fix}</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {/* Show raw output if summary/issues parsing failed or is empty */}
+                            {!summary && issues.length === 0 && (
+                              <details className="mt-2 text-xs">
+                                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Pokaż surową odpowiedź</summary>
+                                <pre className="mt-2 p-2 bg-background/50 rounded border overflow-auto max-h-48 text-xs">
+                                  {rawOutput}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   )}
                 </Card>

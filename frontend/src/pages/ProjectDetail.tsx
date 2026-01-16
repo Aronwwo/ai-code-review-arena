@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -54,6 +54,25 @@ export function ProjectDetail() {
     },
     enabled: !!id,
   });
+
+  // Fetch arena sessions
+  const { data: arenaSessions } = useQuery<ArenaSession[]>({
+    queryKey: ['arena-sessions', id],
+    queryFn: async () => {
+      const response = await api.get(`/arena/sessions?project_id=${id}`);
+      return response.data;
+    },
+    enabled: !!id,
+  });
+
+  // Combine reviews and arena sessions into one list
+  const allReviews = useMemo(() => {
+    const combined = [
+      ...(reviews || []).map(r => ({ ...r, type: 'review' as const })),
+      ...(arenaSessions || []).map(s => ({ ...s, type: 'arena' as const })),
+    ];
+    return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [reviews, arenaSessions]);
 
   // Add file mutation
   const addFileMutation = useMutation({
@@ -231,7 +250,7 @@ export function ProjectDetail() {
           provider: agent.provider,
           model: agent.model,
           temperature: 0.2,
-          max_tokens: 2048,
+          max_tokens: agent.max_tokens || 4096,
           custom_provider: customProvider,
         };
       }
@@ -264,7 +283,7 @@ export function ProjectDetail() {
             provider: agent.provider,
             model: agent.model,
             temperature: 0.2,
-            max_tokens: 2048,
+            max_tokens: agent.max_tokens || 4096,
             timeout_seconds: agent.timeout || 180,
             custom_provider: customProvider,
           };
@@ -277,7 +296,7 @@ export function ProjectDetail() {
         provider: config.moderator.provider,
         model: config.moderator.model,
         temperature: 0.0,
-        max_tokens: 4096,
+        max_tokens: config.moderator.max_tokens || 4096,
         timeout_seconds: config.moderator.timeout || 300,
         custom_provider: moderatorCustomProvider,
       };
@@ -482,7 +501,7 @@ export function ProjectDetail() {
             Pliki ({project.files?.length || 0})
           </TabsTrigger>
           <TabsTrigger value="reviews">
-            Przeglądy ({reviews?.length || 0})
+            Przeglądy ({(reviews?.length || 0) + (arenaSessions?.length || 0)})
           </TabsTrigger>
         </TabsList>
 
@@ -641,35 +660,76 @@ export function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="reviews" className="space-y-4">
-          {reviews && reviews.length > 0 ? (
+          {allReviews && allReviews.length > 0 ? (
             <div className="space-y-4">
-              {reviews.map((review) => (
-                <Link key={review.id} to={`/reviews/${review.id}`}>
-                  <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              {allReviews.map((item) => (
+                <Link key={item.id} to={item.type === 'review' ? `/reviews/${item.id}` : `/arena/${item.id}`}>
+                  <Card className={`hover:shadow-lg transition-shadow cursor-pointer ${item.type === 'arena' ? 'border-l-4 border-l-red-500' : ''}`}>
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                      <CardTitle>Przegląd #{review.id}</CardTitle>
-                        <Badge
-                          variant={
-                            review.status === 'completed'
-                              ? 'success'
-                              : review.status === 'failed'
-                              ? 'destructive'
-                              : review.status === 'running'
-                              ? 'warning'
-                              : 'default'
-                          }
-                        >
-                          {review.status === 'running' && (
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        <CardTitle>
+                          {item.type === 'review' ? `Przegląd #${item.id}` : `Arena #${item.id}`}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          {item.type === 'review' ? (
+                            <Badge
+                              variant={
+                                item.status === 'completed'
+                                  ? 'success'
+                                  : item.status === 'failed'
+                                  ? 'destructive'
+                                  : item.status === 'running'
+                                  ? 'warning'
+                                  : 'default'
+                              }
+                            >
+                              {item.status === 'running' && (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              )}
+                              {item.status}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant={
+                                item.status === 'completed'
+                                  ? 'success'
+                                  : item.status === 'failed'
+                                  ? 'destructive'
+                                  : item.status === 'voting'
+                                  ? 'warning'
+                                  : item.status === 'running'
+                                  ? 'warning'
+                                  : 'default'
+                              }
+                            >
+                              {item.status === 'running' && (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              )}
+                              {item.status}
+                            </Badge>
                           )}
-                          {review.status}
-                        </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {item.type === 'review' ? 'Rada' : 'Arena'}
+                          </Badge>
+                        </div>
                       </div>
                       <CardDescription>
-                        {review.agent_count} agentów • {review.issue_count} problemów
+                        {item.type === 'review' ? (
+                          <>
+                            {item.agent_count} agentów • {item.issue_count} problemów
+                          </>
+                        ) : (
+                          <>
+                            Zespół A: {item.team_a_issues?.length || 0} problemów
+                            {item.winner && item.status === 'completed' && item.winner === 'A' && ' (Zwycięzca)'}
+                            <br />
+                            Zespół B: {item.team_b_issues?.length || 0} problemów
+                            {item.winner && item.status === 'completed' && item.winner === 'B' && ' (Zwycięzca)'}
+                            {item.winner && item.status === 'completed' && item.winner === 'tie' && ' (Remis)'}
+                          </>
+                        )}
                         <br />
-                        Data utworzenia: {new Date(review.created_at).toLocaleString()}
+                        Data utworzenia: {new Date(item.created_at).toLocaleString()}
                       </CardDescription>
                     </CardHeader>
                   </Card>

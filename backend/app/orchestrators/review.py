@@ -100,32 +100,51 @@ Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli.
 WAŻNE: Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."""
     }
 
-    MODERATOR_PROMPT = """Jesteś Moderatorem przeglądu kodu. Poniżej znajdują się odpowiedzi od różnych agentów-ekspertów.
+    MODERATOR_PROMPT = """Jesteś Moderatorem przeglądu kodu. Twoim zadaniem jest TYLKO sformatować odpowiedzi od agentów-ekspertów w czytelny raport.
 
-UWAGA: Agenci oznaczeni jako [TIMEOUT] nie odpowiedzieli w wyznaczonym czasie - IGNORUJ ich całkowicie.
+UWAGA: Agenci oznaczeni jako [BRAK ODPOWIEDZI] nie odpowiedzieli w wyznaczonym czasie lub wystąpił błąd - IGNORUJ ich całkowicie.
+
+KRYTYCZNE ZASADY:
+- Twoim zadaniem jest TYLKO sformatować i zsyntetyzować odpowiedzi od agentów, którzy odpowiedzieli
+- NIE generuj własnej analizy kodu - opieraj się TYLKO na odpowiedziach od agentów
+- Jeśli NIE MA żadnych odpowiedzi od agentów, zwróć: {"summary": "Nie można ocenić kodu - brak odpowiedzi od agentów", "issues": [], "overall_quality": "Ocena ogólna: nie można ocenić"}
+- NIE oceniaj kodu negatywnie tylko dlatego, że niektórzy agenci nie odpowiedzieli
+- Jeśli agenci nie znaleźli problemów, ocena powinna być "dobry" lub "świetny", NIE "wymaga poprawy"
 
 Twoim zadaniem jest:
-1. Przeanalizować odpowiedzi wszystkich agentów (oprócz tych z timeout)
+1. Przeanalizować odpowiedzi wszystkich agentów, którzy odpowiedzieli (oprócz tych z [BRAK ODPOWIEDZI])
 2. Stworzyć JEDEN końcowy raport, który syntetyzuje wszystkie znalezione problemy
 3. Usunąć duplikaty i podsumować najważniejsze kwestie
-4. Ocenić ogólną jakość kodu
+4. Ocenić ogólną jakość kodu na podstawie TYLKO dostępnych odpowiedzi
 
-Odpowiedz w formacie JSON:
+Odpowiedz TYLKO w formacie JSON (bez żadnego dodatkowego tekstu, bez markdown code blocks):
 {
-  "summary": "Ogólne podsumowanie przeglądu kodu PO POLSKU - 2-3 zdania",
+  "summary": "Twoje podsumowanie przeglądu kodu po polsku (2-3 zdania)",
   "issues": [
     {
-      "severity": "info" | "warning" | "error",
-      "category": "security" | "performance" | "style" | "best-practices",
-      "title": "Krótki tytuł PO POLSKU",
-      "description": "Szczegółowy opis PO POLSKU",
-      "suggested_fix": "Sugestia naprawy PO POLSKU (opcjonalne)"
+      "severity": "info",
+      "category": "security",
+      "title": "Tytuł problemu po polsku",
+      "description": "Opis problemu po polsku",
+      "file_name": "nazwa_pliku.ext",
+      "line_start": 10,
+      "line_end": 15,
+      "code_snippet": "fragment kodu",
+      "suggested_fix": "Sugestia poprawki po polsku"
     }
   ],
   "overall_quality": "Ocena ogólna: świetny / dobry / wymaga poprawy / słaby"
 }
 
-Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
+WAŻNE - FORMATOWANIE ODPOWIEDZI:
+- Formatuj TYLKO odpowiedzi od agentów - NIE generuj własnej analizy
+- Zbierz problemy TYLKO z odpowiedzi agentów (zignoruj [BRAK ODPOWIEDZI])
+- Usuń duplikaty i zsyntetyzuj podobne problemy
+- Jeśli w odpowiedziach agentów nie ma problemów, zwróć: {"summary": "Kod jest poprawny, nie znaleziono problemów", "issues": [], "overall_quality": "Ocena ogólna: dobry"}
+- Jeśli są problemy w odpowiedziach agentów, użyj oceny: "dobry" (drobne), "wymaga poprawy" (średnie), "słaby" (poważne)
+- NIE dodawaj własnych problemów - TYLKO te z odpowiedzi agentów
+- Wszystkie teksty po polsku
+- Zwróć TYLKO JSON, bez markdown, bez ```json ani ```"""
 
     def __init__(self, session: Session):
         """Initialize review orchestrator.
@@ -202,10 +221,14 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
                     else AgentConfig(**moderator_config)
                 )
 
-            # === KROK 1: Uruchom wszystkich agentów ===
+            # === KROK 1: Uruchom wszystkich agentów SEKWENCYJNIE (jeden po drugim) ===
+            # WAŻNE: Kolejny agent uruchamia się DOPIERO po otrzymaniu odpowiedzi od poprzedniego
+            # To zapobiega rate limiting i zapewnia stabilność, gdy agenci używają tego samego API key
             agent_responses: dict[str, str | None] = {}
 
-            for agent in agents_list:
+            for idx, agent in enumerate(agents_list):
+                logger.info(f"🤖 [{idx + 1}/{len(agents_list)}] Uruchamiam agenta {agent.role}...")
+                
                 # Get agent config if available
                 agent_config = typed_agent_configs.get(agent.role)
 
@@ -215,6 +238,8 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
 
                 # Get timeout from config (default 180s = 3 min)
                 timeout_seconds = agent_config.timeout_seconds if agent_config else 180
+                # Get max_tokens from config (default 4096)
+                max_tokens = agent_config.max_tokens if agent_config else 4096
 
                 # Get API key for this agent's provider
                 agent_api_key = None
@@ -234,12 +259,31 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
                         header_prefix=cp.header_prefix
                     )
 
-                # Run agent with timeout
+                # Run agent and WAIT for response before starting next agent
+                # await gwarantuje, że kolejny agent nie ruszy dopóki ten nie zakończy
+                logger.info(f"⏳ [{idx + 1}/{len(agents_list)}] Czekam na odpowiedź od agenta {agent.role}...")
                 response = await self._run_agent(
                     review, project, agent, agent_provider, agent_model,
-                    agent_api_key, custom_provider_config, timeout_seconds
+                    agent_api_key, custom_provider_config, timeout_seconds, max_tokens
                 )
                 agent_responses[agent.role] = response
+                
+                # Log what we got from agent
+                if response is None:
+                    logger.warning(f"❌ [{idx + 1}/{len(agents_list)}] Agent {agent.role} zwrócił None - brak odpowiedzi")
+                elif response and response.strip().startswith(("[BŁĄD]", "[ERROR]", "[TIMEOUT]", "[EMPTY]")):
+                    logger.warning(f"❌ [{idx + 1}/{len(agents_list)}] Agent {agent.role} zwrócił błąd: {response[:100]}")
+                else:
+                    logger.info(f"✅ [{idx + 1}/{len(agents_list)}] Agent {agent.role} zakończony. Odpowiedź otrzymana: {response[:100] if response else 'Brak odpowiedzi'}...")
+                
+                # Add delay between agents to avoid rate limiting (especially for Gemini free tier)
+                # Wait 5 seconds between agents to respect rate limits (Gemini free tier is strict)
+                if idx < len(agents_list) - 1:  # Don't wait after last agent
+                    delay_seconds = 5.0  # Increased delay for free tier Gemini API
+                    logger.info(f"⏸️  Czekam {delay_seconds} sekund przed uruchomieniem następnego agenta (aby uniknąć rate limiting Gemini free tier)...")
+                    await asyncio.sleep(delay_seconds)
+                
+                # Teraz możemy przejść do następnego agenta (dopiero po otrzymaniu odpowiedzi i opóźnieniu)
 
             # === KROK 2: Uruchom moderatora ===
             await self._run_moderator(
@@ -298,9 +342,52 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
             model: Fallback model
             api_keys: API keys per provider
         """
+        # Check if we have any valid responses from agents
+        # Filter out None, empty strings, and error messages
+        error_prefixes = ["[BŁĄD]", "[ERROR]", "[TIMEOUT]", "[EMPTY]"]
+        valid_responses = {}
+        logger.info(f"🔍 MODERATOR: Analizowanie odpowiedzi od agentów. Otrzymano {len(agent_responses)} odpowiedzi.")
+        
+        for role, resp in agent_responses.items():
+            logger.info(f"🔍 MODERATOR: Sprawdzam odpowiedź od agenta {role}: {type(resp).__name__}, długość: {len(str(resp)) if resp else 0}")
+            
+            if resp is not None and resp.strip():
+                # Check if response is an error message
+                resp_stripped = resp.strip()
+                is_error = any(resp_stripped.startswith(prefix) for prefix in error_prefixes)
+                if not is_error:
+                    valid_responses[role] = resp
+                    logger.info(f"✅ MODERATOR: Valid response from agent {role}: {resp[:100]}...")
+                else:
+                    logger.info(f"❌ MODERATOR: Filtered out error response from agent {role}: {resp_stripped[:100]}...")
+            else:
+                logger.info(f"⚠️ MODERATOR: Agent {role} returned None or empty response (resp={repr(resp)})")
+        
+        logger.info(f"📊 MODERATOR: Total agent responses: {len(agent_responses)}, Valid responses: {len(valid_responses)}")
+        if valid_responses:
+            logger.info(f"✅ MODERATOR: Valid response roles: {list(valid_responses.keys())}")
+        else:
+            logger.warning(f"⚠️ MODERATOR: BRAK PRAWIDŁOWYCH ODPOWIEDZI - wszystkie agenci zwrócili None/błąd")
+        
+        # If no agents responded, return appropriate message
+        if not valid_responses:
+            logger.warning(f"No valid agent responses for review {review.id} - all agents failed or timed out. Total agents: {len(agent_responses)}")
+            review.summary = json.dumps({
+                "summary": "Nie można przeprowadzić przeglądu kodu, ponieważ żaden z agentów nie zwrócił odpowiedzi. Wszyscy agenci przekroczyli limit czasu lub wystąpił błąd.",
+                "issues": [],
+                "overall_quality": "Ocena ogólna: nie można ocenić (brak odpowiedzi od agentów)"
+            }, ensure_ascii=False)
+            self.session.add(review)
+            self.session.commit()
+            return
+        
         # Build moderator prompt with all agent responses
+        # Use valid_responses (already filtered) instead of agent_responses
         responses_text = ""
-        for role, response in agent_responses.items():
+        valid_count = 0
+        timeout_count = 0
+        
+        for role in ["general", "security", "performance", "style"]:
             role_name = {
                 "general": "Ekspert Ogólny",
                 "security": "Ekspert Bezpieczeństwa",
@@ -308,17 +395,68 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
                 "style": "Ekspert Stylu"
             }.get(role, role.title())
 
-            if response is None:
-                responses_text += f"\n### {role_name} [TIMEOUT]\nAgent nie odpowiedział w wyznaczonym czasie.\n"
+            if role in valid_responses:
+                valid_count += 1
+                response = valid_responses[role]
+                # Remove markdown code blocks before passing to moderator
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response.replace("```json", "", 1).strip()
+                if cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response.replace("```", "", 1).strip()
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3].strip()
+                
+                responses_text += f"\n### {role_name}\n{cleaned_response}\n"
             else:
-                responses_text += f"\n### {role_name}\n{response}\n"
+                timeout_count += 1
+                responses_text += f"\n### {role_name} [BRAK ODPOWIEDZI]\nAgent nie odpowiedział w wyznaczonym czasie lub wystąpił błąd.\n"
 
-        user_prompt = f"""Projekt: {project.name}
+        # CRITICAL: Double-check if we have any valid responses
+        # This is a safety check - if valid_count is 0 OR valid_responses is empty, don't call moderator
+        if valid_count == 0 or not valid_responses:
+            logger.warning(f"🚫 MODERATOR: valid_count={valid_count}, valid_responses={len(valid_responses)} (roles: {list(valid_responses.keys())}) - NIE WYWOŁUJĘ moderatora LLM!")
+            logger.warning(f"🚫 MODERATOR: Review {review.id} - all agents failed or timed out. Not calling moderator LLM.")
+            
+            # Log all agent responses for debugging
+            logger.warning(f"🔍 MODERATOR DEBUG: All agent_responses:")
+            for role, resp in agent_responses.items():
+                logger.warning(f"  - {role}: {type(resp).__name__} = {repr(resp)[:200] if resp else 'None'}")
+            
+            review.summary = json.dumps({
+                "summary": "Nie można przeprowadzić przeglądu kodu, ponieważ żaden z agentów nie zwrócił odpowiedzi. Wszyscy agenci przekroczyli limit czasu lub wystąpił błąd.",
+                "issues": [],
+                "overall_quality": "Ocena ogólna: nie można ocenić (brak odpowiedzi od agentów)"
+            }, ensure_ascii=False)
+            self.session.add(review)
+            self.session.commit()
+            logger.info(f"✅ MODERATOR: Ustawiono summary na komunikat o braku odpowiedzi. NIE WYWOŁAŁEM moderatora LLM.")
+            return
+        
+        logger.info(f"✅ MODERATOR: valid_count={valid_count} > 0, valid_responses={len(valid_responses)} (roles: {list(valid_responses.keys())}) - WYWOŁUJĘ moderatora LLM")
 
-Odpowiedzi agentów:
+        user_prompt = f"""Odpowiedzi od agentów-ekspertów:
+
 {responses_text}
 
-Stwórz końcowy raport przeglądu kodu."""
+ZADANIE:
+Sformatuj powyższe odpowiedzi od agentów w JEDEN końcowy raport JSON.
+
+KRYTYCZNE ZASADY:
+- Masz {valid_count} odpowiedzi od agentów (zignoruj {timeout_count} oznaczone jako [BRAK ODPOWIEDZI])
+- TYLKO formatuj i syntetyzuj odpowiedzi od agentów - NIE analizuj kodu samodzielnie
+- TYLKO zebierz problemy z odpowiedzi agentów - NIE dodawaj własnych problemów
+- Jeśli w odpowiedziach agentów nie ma problemów, zwróć: {{"summary": "Kod jest poprawny, nie znaleziono problemów", "issues": [], "overall_quality": "Ocena ogólna: dobry"}}
+- Jeśli w odpowiedziach agentów są problemy, zsyntetyzuj je i usuń duplikaty
+- Ocenę ogólną wyznacz TYLKO na podstawie problemów znalezionych przez agentów
+
+Przykład poprawnej odpowiedzi (gdy agenci znaleźli problemy):
+{{"summary": "Agenci znaleźli kilka problemów: [synteza problemów z odpowiedzi agentów]", "issues": [synteza issues z odpowiedzi agentów, bez duplikatów], "overall_quality": "Ocena ogólna: wymaga poprawy"}}
+
+Przykład poprawnej odpowiedzi (gdy agenci nie znaleźli problemów):
+{{"summary": "Kod jest poprawny, nie znaleziono problemów", "issues": [], "overall_quality": "Ocena ogólna: dobry"}}
+
+Zwróć TYLKO JSON, bez dodatkowego tekstu."""
 
         messages = [
             LLMMessage(role="system", content=self.MODERATOR_PROMPT),
@@ -329,6 +467,7 @@ Stwórz końcowy raport przeglądu kodu."""
         mod_provider = moderator_config.provider if moderator_config else provider_name
         mod_model = moderator_config.model if moderator_config else model
         mod_timeout = moderator_config.timeout_seconds if moderator_config else 300  # 5 min default for moderator
+        mod_max_tokens = moderator_config.max_tokens if moderator_config else 4096  # Default 4096 for moderator
 
         # Get API key
         mod_api_key = None
@@ -355,12 +494,72 @@ Stwórz końcowy raport przeglądu kodu."""
                     provider_name=mod_provider,
                     model=mod_model,
                     temperature=0.0,
-                    max_tokens=8192,
+                    max_tokens=mod_max_tokens,
                     api_key=mod_api_key,
                     custom_provider_config=custom_provider_config
                 ),
                 timeout=mod_timeout
             )
+
+            # Remove markdown code block fences if present
+            cleaned_output = raw_output.strip()
+            if cleaned_output.startswith("```json"):
+                cleaned_output = cleaned_output.replace("```json", "", 1).strip()
+            if cleaned_output.startswith("```"):
+                cleaned_output = cleaned_output.replace("```", "", 1).strip()
+            if cleaned_output.endswith("```"):
+                cleaned_output = cleaned_output[:-3].strip()
+            
+            # Check for placeholders BEFORE storing
+            if self._contains_placeholders(cleaned_output):
+                logger.warning("Moderator response contains placeholder patterns - rejecting")
+                review.summary = "[BŁĄD] Moderator zwrócił odpowiedź z placeholderami zamiast rzeczywistej analizy"
+                self.session.add(review)
+                self.session.commit()
+                return
+            
+            # Auto-correct overall_quality if inconsistent with issues count
+            try:
+                moderator_data = json.loads(cleaned_output)
+                
+                # Check parsed data for placeholders
+                summary = moderator_data.get("summary", "")
+                if self._contains_placeholders(summary):
+                    logger.warning("Moderator summary contains placeholder patterns - rejecting")
+                    review.summary = "[BŁĄD] Moderator zwrócił odpowiedź z placeholderami zamiast rzeczywistej analizy"
+                    self.session.add(review)
+                    self.session.commit()
+                    return
+                
+                # Check issues for placeholders
+                issues = moderator_data.get("issues", [])
+                for issue in issues:
+                    if isinstance(issue, dict):
+                        title = issue.get("title", "")
+                        description = issue.get("description", "")
+                        if self._contains_placeholders(title) or self._contains_placeholders(description):
+                            logger.warning(f"Moderator issue contains placeholder patterns - rejecting entire response")
+                            review.summary = "[BŁĄD] Moderator zwrócił odpowiedź z placeholderami zamiast rzeczywistej analizy"
+                            self.session.add(review)
+                            self.session.commit()
+                            return
+                
+                issues_count = len(issues)
+                overall_quality = moderator_data.get("overall_quality", "")
+                
+                # If no issues but quality says "wymaga poprawy" or "słaby", correct it
+                if issues_count == 0:
+                    if "wymaga poprawy" in overall_quality.lower() or "słaby" in overall_quality.lower():
+                        logger.info(f"Auto-correcting overall_quality: no issues but quality was '{overall_quality}'")
+                        moderator_data["overall_quality"] = "Ocena ogólna: dobry"
+                        cleaned_output = json.dumps(moderator_data, ensure_ascii=False)
+                
+                # Store cleaned version
+                raw_output = cleaned_output
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.debug(f"Could not auto-correct overall_quality: {e}")
+                # Still use cleaned output even if auto-correction failed
+                raw_output = cleaned_output
 
             # Store moderator summary in review
             review.summary = raw_output[:50000]
@@ -387,7 +586,8 @@ Stwórz końcowy raport przeglądu kodu."""
         model: str | None,
         api_key: str | None = None,
         custom_provider_config: CustomProviderConfig | None = None,
-        timeout_seconds: int = 180
+        timeout_seconds: int = 180,
+        max_tokens: int = 4096
     ):
         """Run a single agent for the review with timeout handling.
 
@@ -437,7 +637,7 @@ Stwórz końcowy raport przeglądu kodu."""
                         provider_name=provider_name,
                         model=model,
                         temperature=0.0,
-                        max_tokens=4096,
+                        max_tokens=max_tokens,
                         api_key=api_key,
                         custom_provider_config=custom_provider_config
                     )
@@ -451,30 +651,54 @@ Stwórz końcowy raport przeglądu kodu."""
                     provider_name=provider_name,
                     model=model,
                     temperature=0.0,
-                    max_tokens=4096,
+                    max_tokens=max_tokens,  # Use max_tokens parameter instead of hardcoded 4096
                     api_key=api_key,
                     custom_provider_config=custom_provider_config
                 )
 
         try:
             # Run with timeout
+            logger.info(f"🔄 Agent {agent.role} ({provider_name}/{model}) - Starting generation with timeout {timeout_seconds}s...")
             raw_output, response_provider, response_model = await asyncio.wait_for(
                 _generate_with_cache(),
                 timeout=timeout_seconds
             )
+            logger.info(f"✅ Agent {agent.role} received response: provider={response_provider}, model={response_model}, length={len(raw_output) if raw_output else 0} chars")
+
+            # Check if response is empty
+            if not raw_output or not raw_output.strip():
+                logger.warning(f"Agent {agent.role} returned empty response")
+                agent.raw_output = "[EMPTY] Agent zwrócił pustą odpowiedź"
+                agent.parsed_successfully = False
+                agent.timed_out = False
+                agent.provider = response_provider or provider_name or "unknown"
+                agent.model = response_model or model or "unknown"
+                
+                self.session.add(agent)
+                self.session.commit()
+                self.session.refresh(agent)
+                
+                await ws_manager.send_agent_completed(
+                    review.id,
+                    agent.role,
+                    0,
+                    False
+                )
+                return None
 
             # Parse response
             parsed_successfully, issues_data = self._parse_response(raw_output)
 
             # Update the existing agent record - SUCCESS
-            agent.provider = response_provider
-            agent.model = response_model
+            agent.provider = response_provider or provider_name or "unknown"
+            agent.model = response_model or model or "unknown"
             agent.raw_output = raw_output[:50000]  # Truncate if too long
             agent.parsed_successfully = parsed_successfully
             agent.timed_out = False
 
             self.session.add(agent)
             self.session.commit()
+            self.session.refresh(agent)
 
             # Send agent completed event
             await ws_manager.send_agent_completed(
@@ -493,9 +717,12 @@ Stwórz końcowy raport przeglądu kodu."""
             agent.timed_out = True
             agent.parsed_successfully = False
             agent.raw_output = f"[TIMEOUT] Agent przekroczył limit czasu ({timeout_seconds} sekund)"
+            agent.provider = provider_name or "unknown"
+            agent.model = model or "unknown"
 
             self.session.add(agent)
             self.session.commit()
+            self.session.refresh(agent)
 
             # Send agent completed event with timeout flag
             await ws_manager.send_agent_completed(
@@ -507,16 +734,87 @@ Stwórz końcowy raport przeglądu kodu."""
 
             return None  # No response
 
+        except Exception as e:
+            # Handle any other errors (API errors, network errors, etc.)
+            error_msg = str(e)[:500]  # Truncate error message
+            error_type = type(e).__name__
+            
+            # Special handling for common errors
+            is_rate_limit = "429" in error_msg or "Too Many Requests" in error_msg or "rate limit" in error_msg.lower()
+            is_ollama_error = "Ollama" in error_type or "ollama" in error_msg.lower()
+            is_value_error = error_type == "ValueError"
+            
+            if is_rate_limit:
+                error_output = f"[BŁĄD] Rate limiting: Przekroczono limit zapytań do API. Spróbuj ponownie za kilka minut."
+                logger.warning(f"Agent {agent.role} hit rate limit (429) for provider {provider_name}. Error: {error_msg}")
+            elif is_ollama_error or (is_value_error and "ollama" in error_msg.lower()):
+                # Ollama-specific error messages
+                if "not available" in error_msg.lower() or "is not available" in error_msg.lower():
+                    error_output = f"[BŁĄD] Ollama nie jest dostępny: {error_msg}. Sprawdź czy Ollama jest uruchomiony (np. 'ollama serve')."
+                elif "model" in error_msg.lower() and "not found" in error_msg.lower():
+                    error_output = f"[BŁĄD] Model Ollama nie został znaleziony: {error_msg}. Sprawdź dostępne modele (np. 'ollama list')."
+                elif "timeout" in error_msg.lower():
+                    error_output = f"[BŁĄD] Ollama timeout: Przekroczono limit czasu ({timeout_seconds}s). Model może potrzebować więcej czasu lub Ollama nie odpowiada."
+                else:
+                    error_output = f"[BŁĄD] Ollama błąd: {error_msg}"
+                logger.error(f"🦙 Agent {agent.role} - Ollama error: {error_type}: {error_msg}", exc_info=True)
+            else:
+                error_output = f"[BŁĄD] {error_type}: {error_msg}"
+            
+            logger.error(f"Agent {agent.role} ({provider_name}/{model}) failed with error: {error_type}: {error_msg}", exc_info=True)
+
+            agent.timed_out = False
+            agent.parsed_successfully = False
+            agent.raw_output = error_output
+            agent.provider = provider_name or "unknown"
+            agent.model = model or "unknown"
+
+            logger.info(f"Saving error for agent {agent.role}: raw_output='{error_output[:100]}'")
+            self.session.add(agent)
+            self.session.commit()
+            self.session.refresh(agent)
+            logger.info(f"Agent {agent.role} saved with raw_output length: {len(agent.raw_output) if agent.raw_output else 0}")
+
+            # Send agent completed event with error flag
+            await ws_manager.send_agent_completed(
+                review.id,
+                agent.role,
+                0,
+                False
+            )
+
+            # Return error message instead of None, so it can be logged/filtered by moderator
+            # Moderator will filter out responses starting with [BŁĄD] etc.
+            return error_output
+
     async def _store_moderator_issues(self, review: Review, summary_text: str | None):
         """Parse moderator JSON summary and store issues for council review."""
         if not summary_text:
             logger.warning("Council summary missing - no issues stored")
             return
 
+        # Check for placeholder patterns before parsing
+        if self._contains_placeholders(summary_text):
+            logger.warning("Moderator response contains placeholder patterns - rejecting")
+            review.summary = "[BŁĄD] Moderator zwrócił odpowiedź z placeholderami zamiast rzeczywistej analizy"
+            self.session.add(review)
+            self.session.commit()
+            return
+
+        # Remove markdown code block fences if present
+        cleaned_text = summary_text.strip()
+        if cleaned_text.startswith("```json"):
+            cleaned_text = cleaned_text.replace("```json", "", 1).strip()
+        if cleaned_text.startswith("```"):
+            cleaned_text = cleaned_text.replace("```", "", 1).strip()
+        if cleaned_text.endswith("```"):
+            cleaned_text = cleaned_text[:-3].strip()
+
         try:
-            data = json.loads(summary_text)
-        except json.JSONDecodeError:
-            logger.error("Council summary is not valid JSON - no issues stored")
+            data = json.loads(cleaned_text)
+        except json.JSONDecodeError as e:
+            logger.error(f"Council summary is not valid JSON - no issues stored. Error: {e}")
+            logger.debug(f"Cleaned text preview: {cleaned_text[:500]}...")
             return
 
         issues = data.get("issues", [])
@@ -541,9 +839,9 @@ Stwórz końcowy raport przeglądu kodu."""
                 category=issue_data.get("category", "style"),
                 title=title,
                 description=description,
-                file_name=None,
-                line_start=None,
-                line_end=None
+                file_name=issue_data.get("file_name"),
+                line_start=issue_data.get("line_start"),
+                line_end=issue_data.get("line_end")
             )
             self.session.add(issue)
             self.session.commit()
@@ -600,28 +898,89 @@ Język: {file.language or "nieznany"}
 """
 
         prompt += """
-Przeanalizuj ten kod i zwróć swoje uwagi w formacie JSON:
+Przeanalizuj ten kod i zwróć swoje uwagi TYLKO w formacie JSON (bez dodatkowego tekstu, bez markdown code blocks):
 
 {
   "issues": [
     {
-      "severity": "info" | "warning" | "error",
-      "category": "security" | "performance" | "style" | "best-practices" | itp,
-      "title": "Krótki tytuł PO POLSKU",
-      "description": "Szczegółowy opis PO POLSKU",
+      "severity": "info",
+      "category": "security",
+      "title": "Tytuł problemu po polsku",
+      "description": "Opis problemu po polsku",
       "file_name": "nazwa_pliku.ext",
       "line_start": 10,
       "line_end": 15,
-      "suggested_fix": "Opcjonalna sugestia poprawki PO POLSKU"
+      "code_snippet": "fragment kodu",
+      "suggested_fix": "Sugestia poprawki po polsku"
     }
   ],
-  "summary": "Opcjonalne podsumowanie PO POLSKU"
+  "summary": "Podsumowanie analizy po polsku"
 }
 
-KRYTYCZNE: Wszystkie pola tekstowe (title, description, suggested_fix, summary) MUSZĄ być PO POLSKU.
-Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
+WAŻNE:
+- Przeanalizuj kod i znajdź PRAWDZIWE problemy
+- Wypełnij wszystkie pola PRAWDZIWYMI danymi z analizy
+- Jeśli nie ma problemów, zwróć: {"issues": [], "summary": "Nie znaleziono problemów"}
+- Wszystkie teksty muszą być po polsku
+- Zwróć TYLKO JSON, bez markdown, bez dodatkowego tekstu, bez ```json ani ```"""
 
         return prompt
+
+    def _contains_placeholders(self, text: str) -> bool:
+        """Check if text contains placeholder patterns that should be rejected.
+        
+        Args:
+            text: Text to check
+            
+        Returns:
+            True if placeholders detected
+        """
+        if not text or len(text.strip()) < 10:
+            return False  # Too short to be a real placeholder issue
+        
+        text_lower = text.lower()
+        
+        # Strong indicators - these are almost certainly placeholders
+        strong_patterns = [
+            "po polsku",  # Must be exact phrase
+            "wypełnij",
+            "krótki tytuł",
+            "szczegółowy opis",
+            "opcjonalne podsumowanie",
+            "ogólne podsumowanie przeglądu kodu",
+            "sugestia naprawy po polsku",
+            "opcjonalna sugestia poprawki po polsku",
+            "| \"warning\" | \"error\"",  # Example syntax from prompts
+            "\"info\" | \"warning\"",  # Example syntax
+            "rzeczywisty tytuł problemu",  # Full phrase from prompt
+            "rzeczywiste podsumowanie przeglądu kodu",  # Full phrase from prompt
+            "szczegółowy opis znalezionego problemu po polsku",  # Full phrase from prompt
+        ]
+        
+        for pattern in strong_patterns:
+            if pattern in text_lower:
+                return True
+        
+        # Weak indicators - check context (must appear in suspicious context)
+        weak_patterns = [
+            ("rzeczywisty", ["tytuł", "problem", "podsumowanie", "opis"]),
+            ("rzeczywiste", ["podsumowanie", "dane"]),
+        ]
+        
+        for word, context_words in weak_patterns:
+            if word in text_lower:
+                # Check if it appears with context words that suggest it's from a prompt
+                for ctx in context_words:
+                    if ctx in text_lower:
+                        # Check proximity - if they're close together, it's likely a placeholder
+                        word_pos = text_lower.find(word)
+                        ctx_pos = text_lower.find(ctx)
+                        if word_pos != -1 and ctx_pos != -1:
+                            distance = abs(word_pos - ctx_pos)
+                            if distance < 50:  # Words are close together
+                                return True
+        
+        return False
 
     def _parse_response(self, raw_output: str) -> tuple[bool, list[dict]]:
         """Parse LLM response into issues.
@@ -632,9 +991,39 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
         Returns:
             Tuple of (success, issues_list)
         """
+        # Check for placeholder patterns first
+        if self._contains_placeholders(raw_output):
+            logger.warning("Response contains placeholder patterns - rejecting")
+            return False, []
+        
+        # Remove markdown code block fences if present
+        cleaned_output = raw_output.strip()
+        if cleaned_output.startswith("```json"):
+            cleaned_output = cleaned_output.replace("```json", "", 1).strip()
+        if cleaned_output.startswith("```"):
+            cleaned_output = cleaned_output.replace("```", "", 1).strip()
+        if cleaned_output.endswith("```"):
+            cleaned_output = cleaned_output[:-3].strip()
+        
         try:
             # Try to parse as JSON
-            data = json.loads(raw_output)
+            data = json.loads(cleaned_output)
+            
+            # Check parsed data for placeholders
+            if isinstance(data, dict):
+                summary = data.get("summary", "")
+                if self._contains_placeholders(summary):
+                    logger.warning("Summary contains placeholder patterns - rejecting")
+                    return False, []
+                
+                issues = data.get("issues", [])
+                for issue in issues:
+                    if isinstance(issue, dict):
+                        title = issue.get("title", "")
+                        description = issue.get("description", "")
+                        if self._contains_placeholders(title) or self._contains_placeholders(description):
+                            logger.warning("Issue contains placeholder patterns - rejecting")
+                            return False, []
             schema = ReviewResponseSchema(**data)
             issues_data = [issue.model_dump() for issue in schema.issues]
             return True, issues_data
@@ -643,7 +1032,7 @@ Zwróć TYLKO poprawny JSON, bez dodatkowego tekstu."""
             logger.warning(f"JSON decode error in LLM response: {str(e)[:200]}")
             logger.debug(f"Raw output preview: {raw_output[:500]}...")
 
-            # Fallback: try to extract JSON from text
+            # Fallback: try to extract JSON from text (already cleaned, but try regex)
             try:
                 # Look for JSON block
                 import re

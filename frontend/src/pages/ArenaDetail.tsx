@@ -282,7 +282,61 @@ export function ArenaDetail() {
                 {session.team_a_summary && (
                   <div className="bg-muted/50 p-4 rounded-lg">
                     <p className="text-sm font-medium mb-2">Podsumowanie</p>
-                    <p className="text-sm whitespace-pre-wrap">{session.team_a_summary}</p>
+                    <div className="text-sm whitespace-pre-wrap space-y-2">
+                      {(() => {
+                        // Try to format summary - if it looks like JSON, parse and format it nicely
+                        const summary = session.team_a_summary;
+                        try {
+                          // Check if summary contains JSON
+                          if (summary.trim().startsWith('{') || summary.trim().startsWith('[')) {
+                            const parsed = JSON.parse(summary);
+                            // If it's a structured object, format it nicely
+                            if (parsed.summary && parsed.issues) {
+                              return (
+                                <div className="space-y-2">
+                                  {parsed.summary && (
+                                    <p className="font-medium">{parsed.summary}</p>
+                                  )}
+                                  {parsed.overall_quality && (
+                                    <p className="text-muted-foreground">{parsed.overall_quality}</p>
+                                  )}
+                                </div>
+                              );
+                            }
+                          }
+                        } catch {
+                          // Not JSON, display as text
+                        }
+                        // Display as formatted text (split by lines, format numbered lists)
+                        const lines = summary.split('\n');
+                        return (
+                          <div className="space-y-1">
+                            {lines.map((line, idx) => {
+                              const trimmed = line.trim();
+                              // Format numbered lists (1., 2., etc.)
+                              if (/^\d+\.\s/.test(trimmed)) {
+                                return (
+                                  <div key={idx} className="pl-4">
+                                    <span className="font-medium">{trimmed}</span>
+                                  </div>
+                                );
+                              }
+                              // Format headers (text followed by colon)
+                              if (trimmed.endsWith(':') && idx < 3) {
+                                return (
+                                  <p key={idx} className="font-medium mt-2">{trimmed}</p>
+                                );
+                              }
+                              return (
+                                <p key={idx} className={trimmed ? '' : 'text-transparent select-none'}>
+                                  {trimmed || ' '}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 )}
                 <div>
@@ -319,7 +373,61 @@ export function ArenaDetail() {
                 {session.team_b_summary && (
                   <div className="bg-muted/50 p-4 rounded-lg">
                     <p className="text-sm font-medium mb-2">Podsumowanie</p>
-                    <p className="text-sm whitespace-pre-wrap">{session.team_b_summary}</p>
+                    <div className="text-sm whitespace-pre-wrap space-y-2">
+                      {(() => {
+                        // Try to format summary - if it looks like JSON, parse and format it nicely
+                        const summary = session.team_b_summary;
+                        try {
+                          // Check if summary contains JSON
+                          if (summary.trim().startsWith('{') || summary.trim().startsWith('[')) {
+                            const parsed = JSON.parse(summary);
+                            // If it's a structured object, format it nicely
+                            if (parsed.summary && parsed.issues) {
+                              return (
+                                <div className="space-y-2">
+                                  {parsed.summary && (
+                                    <p className="font-medium">{parsed.summary}</p>
+                                  )}
+                                  {parsed.overall_quality && (
+                                    <p className="text-muted-foreground">{parsed.overall_quality}</p>
+                                  )}
+                                </div>
+                              );
+                            }
+                          }
+                        } catch {
+                          // Not JSON, display as text
+                        }
+                        // Display as formatted text (split by lines, format numbered lists)
+                        const lines = summary.split('\n');
+                        return (
+                          <div className="space-y-1">
+                            {lines.map((line, idx) => {
+                              const trimmed = line.trim();
+                              // Format numbered lists (1., 2., etc.)
+                              if (/^\d+\.\s/.test(trimmed)) {
+                                return (
+                                  <div key={idx} className="pl-4">
+                                    <span className="font-medium">{trimmed}</span>
+                                  </div>
+                                );
+                              }
+                              // Format headers (text followed by colon)
+                              if (trimmed.endsWith(':') && idx < 3) {
+                                return (
+                                  <p key={idx} className="font-medium mt-2">{trimmed}</p>
+                                );
+                              }
+                              return (
+                                <p key={idx} className={trimmed ? '' : 'text-transparent select-none'}>
+                                  {trimmed || ' '}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 )}
                 <div>

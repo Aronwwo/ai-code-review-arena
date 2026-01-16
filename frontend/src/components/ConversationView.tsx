@@ -160,17 +160,17 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
             disabled={startConversationMutation.isPending}
           >
             <Users className="h-4 w-4 mr-2" />
-            Rada
+            Rozpocznij dyskusję
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleStartConversation('arena')}
             disabled={startConversationMutation.isPending || !issueId}
-            title={!issueId ? 'Arena wymaga wybrania konkretnego issue' : 'Rozpocznij debatę Arena'}
+            title={!issueId ? 'Arena wymaga wybrania konkretnego issue' : 'Rozpocznij debatę'}
           >
             <Swords className="h-4 w-4 mr-2" />
-            Arena
+            Rozpocznij debatę
           </Button>
         </div>
       </div>
@@ -215,7 +215,7 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
               <CardContent className="p-4 text-center text-muted-foreground">
                 <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Brak dyskusji</p>
-                <p className="text-xs mt-1">Rozpocznij Radę lub Arenę</p>
+                <p className="text-xs mt-1">Rozpocznij dyskusję lub debatę</p>
               </CardContent>
             </Card>
           )}
@@ -271,7 +271,55 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
                             Runda {msg.turn_index + 1}
                           </span>
                         </div>
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        {(() => {
+                          // Try to parse as JSON and format nicely
+                          let content = msg.content;
+                          try {
+                            const parsed = JSON.parse(content);
+                            if (typeof parsed === 'object' && parsed !== null) {
+                              // If it's a JSON object with issues, format it nicely
+                              if (parsed.issues && Array.isArray(parsed.issues)) {
+                                return (
+                                  <div className="space-y-3">
+                                    {parsed.summary && (
+                                      <p className="text-sm font-medium">{parsed.summary}</p>
+                                    )}
+                                    {parsed.issues.length > 0 && (
+                                      <div className="space-y-2">
+                                        <h5 className="text-xs font-semibold text-muted-foreground uppercase">Wykryte problemy:</h5>
+                                        {parsed.issues.map((issue: any, idx: number) => (
+                                          <div key={idx} className="border-l-2 border-border pl-3 py-2 bg-background/50 rounded">
+                                            <p className="text-sm font-medium">{issue.title || `Problem ${idx + 1}`}</p>
+                                            {issue.description && (
+                                              <p className="text-xs text-muted-foreground mt-1">{issue.description}</p>
+                                            )}
+                                            {issue.file_name && (
+                                              <p className="text-xs text-muted-foreground mt-1">
+                                                📄 {issue.file_name}
+                                                {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
+                                              </p>
+                                            )}
+                                            {issue.suggested_fix && (
+                                              <div className="mt-2 p-2 bg-muted/30 rounded text-xs">
+                                                <span className="font-semibold">💡 Sugestia: </span>
+                                                <span>{issue.suggested_fix}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              // If it's other JSON, show formatted
+                              content = JSON.stringify(parsed, null, 2);
+                            }
+                          } catch (e) {
+                            // Not JSON, use as-is
+                          }
+                          return <p className="text-sm whitespace-pre-wrap">{content}</p>;
+                        })()}
                       </div>
                     ))}
 
@@ -327,16 +375,16 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
                     disabled={startConversationMutation.isPending}
                   >
                     <Users className="h-4 w-4 mr-2" />
-                    Rozpocznij Radę
+                    Rozpocznij dyskusję
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => handleStartConversation('arena')}
                     disabled={startConversationMutation.isPending || !issueId}
-                    title={!issueId ? 'Arena wymaga wybrania konkretnego issue' : 'Rozpocznij debatę Arena'}
+                    title={!issueId ? 'Arena wymaga wybrania konkretnego issue' : 'Rozpocznij debatę'}
                   >
                     <Swords className="h-4 w-4 mr-2" />
-                    Rozpocznij Arenę
+                    Rozpocznij debatę
                   </Button>
                 </div>
               </CardContent>

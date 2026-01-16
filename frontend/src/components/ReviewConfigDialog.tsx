@@ -18,6 +18,7 @@ interface AgentConfig {
   provider: string;
   model: string;
   timeout: number; // timeout w sekundach (domyślnie 180 = 3 minuty)
+  max_tokens?: number; // max tokens do wygenerowania (domyślnie 4096)
 }
 
 interface TeamConfig {
@@ -35,6 +36,7 @@ export interface ReviewConfig {
     provider: string;
     model: string;
     timeout: number; // timeout w sekundach (domyślnie 300 = 5 minut)
+    max_tokens: number; // max tokens do wygenerowania (domyślnie 4096)
   };
   mode: 'council' | 'arena' | null;
 }
@@ -64,7 +66,8 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
   enabled: true,
   provider: 'mock',
   model: 'mock-fast',
-  timeout: 180 // 3 minuty
+  timeout: 180, // 3 minuty
+  max_tokens: 4096 // domyślnie 4096
 };
 
 const createDefaultTeam = (): TeamConfig => ({
@@ -96,7 +99,7 @@ export function ReviewConfigDialog({
     agents: createDefaultTeam(),
     teamA: createDefaultTeam(),
     teamB: createDefaultTeam(),
-    moderator: { provider: 'mock', model: 'mock-fast', timeout: 300 },
+    moderator: { provider: 'mock', model: 'mock-fast', timeout: 300, max_tokens: 4096 },
     mode: null,
   });
 
@@ -214,7 +217,7 @@ export function ReviewConfigDialog({
     });
   };
 
-  const updateModerator = (updates: Partial<{ provider: string; model: string; type: 'debate' | 'consensus' | 'strategic' }>) => {
+  const updateModerator = (updates: Partial<{ provider: string; model: string; timeout: number; max_tokens: number }>) => {
     setConfig(prev => ({
       ...prev,
       moderator: { ...prev.moderator, ...updates },
@@ -406,6 +409,21 @@ export function ReviewConfigDialog({
                       <span className="text-xs text-muted-foreground">
                         ({Math.floor(agent.timeout / 60)}:{String(agent.timeout % 60).padStart(2, '0')} min)
                       </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Max Tokens</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={256}
+                        max={8192}
+                        step={256}
+                        className="w-20 p-2 border rounded-md text-sm bg-background"
+                        value={agent.max_tokens || 4096}
+                        onChange={(e) => updateTeamAgent(team, role.id, { max_tokens: parseInt(e.target.value) || 4096 })}
+                      />
+                      <span className="text-xs text-muted-foreground">(domyślnie: 4096)</span>
                     </div>
                   </div>
                 </CardContent>
@@ -639,6 +657,39 @@ export function ReviewConfigDialog({
                             : 'Brak modeli - skonfiguruj w ustawieniach'}
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Timeout (sekundy)</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={30}
+                        max={3600}
+                        className="w-20 p-2 border rounded-md text-sm bg-background"
+                        value={config.moderator.timeout}
+                        onChange={(e) => updateModerator({ timeout: parseInt(e.target.value) || 300 })}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        ({Math.floor(config.moderator.timeout / 60)}:{String(config.moderator.timeout % 60).padStart(2, '0')} min)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Max Tokens</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={256}
+                        max={8192}
+                        step={256}
+                        className="w-20 p-2 border rounded-md text-sm bg-background"
+                        value={config.moderator.max_tokens}
+                        onChange={(e) => updateModerator({ max_tokens: parseInt(e.target.value) || 4096 })}
+                      />
+                      <span className="text-xs text-muted-foreground">(domyślnie: 4096)</span>
                     </div>
                   </div>
 

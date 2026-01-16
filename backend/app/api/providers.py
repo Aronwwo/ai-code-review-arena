@@ -80,14 +80,45 @@ async def list_provider_models(
         url = f"{base_url}/models?key={data.api_key}"
         payload = await _fetch_json_with_retry(url)
 
+        # List of models available in FREE Google AI Studio API
+        # These are models that are known to work with free tier
+        free_tier_models = [
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro",
+            "gemini-1.5-pro-latest",
+            "gemini-2.0-flash-exp",
+            # Note: gemini-2.5-flash may require paid tier or may not be available yet
+            # If user has access, they can add it manually
+        ]
+
         raw_models = payload.get("models", [])
         models = []
-        for model in raw_models:
-            name = model.get("name", "")
+        for model_data in raw_models:
+            name = model_data.get("name", "")
             if name.startswith("models/"):
                 name = name.replace("models/", "", 1)
-            if name:
+            
+            # Filter: only include models that:
+            # 1. Support generateContent (required for our use case)
+            # 2. Are in the free tier list OR explicitly support free tier
+            supported_methods = model_data.get("supportedGenerationMethods", [])
+            if "generateContent" not in supported_methods:
+                continue  # Skip models that don't support generateContent
+            
+            # Check if model is in free tier list (case-insensitive)
+            name_lower = name.lower()
+            if any(ftm.lower() == name_lower for ftm in free_tier_models):
                 models.append(name)
+            # Also allow models that explicitly say they're free tier
+            elif name_lower.startswith("gemini-1.5") and "generateContent" in supported_methods:
+                # Allow gemini-1.5-* models that support generateContent
+                models.append(name)
+        
+        # If no models found, add at least the basic free tier models
+        if not models:
+            models = ["gemini-1.5-flash", "gemini-1.5-pro"]
+        
         models = sorted(set(models))
         cache.set(cache_key, models, ttl=300)
         return ProviderModelsResponse(models=models, cached=False)

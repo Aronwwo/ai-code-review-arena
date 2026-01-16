@@ -77,18 +77,28 @@ Odpowiadaj krótko i konkretnie po polsku.""",
 Odpowiadaj krótko i konkretnie po polsku."""
     }
 
-    SUMMARY_PROMPT = """Na podstawie analiz 4 agentów (general, security, performance, style),
-napisz zwięzłe podsumowanie znalezionych problemów.
+    SUMMARY_PROMPT = """Jesteś moderatorem przeglądu kodu. Twoim zadaniem jest STWORZYĆ ZWIĘZŁE PODSUMOWANIE na podstawie RZECZYWISTYCH analiz od 4 agentów-ekspertów.
 
-Analizy agentów:
+KRYTYCZNE ZASADY:
+- TYLKO syntetyzuj i podsumuj odpowiedzi od agentów - NIE analizuj kodu samodzielnie
+- TYLKO używaj problemów znalezionych przez agentów - NIE dodawaj własnych problemów
+- Jeśli agenci nie znaleźli problemów, napisz: "Agenci nie znaleźli problemów w kodzie"
+- Jeśli agenci znaleźli problemy, wymień tylko te problemy, które są w ich analizach
+
+Analizy agentów (rzeczywiste odpowiedzi):
 {agent_analyses}
 
-Napisz podsumowanie w formacie:
-1. Najważniejsze problemy (max 3)
-2. Ogólna ocena jakości kodu (1-10)
-3. Rekomendacja (1-2 zdania)
+Twoim zadaniem jest:
+1. Przeczytać wszystkie analizy od agentów
+2. Wyodrębnić najważniejsze problemy (max 3-5)
+3. Napisać zwięzłe podsumowanie (2-3 zdania)
 
-Odpowiadaj po polsku, zwięźle i konkretnie."""
+Format odpowiedzi (TYLKO zwykły tekst, NIE JSON):
+1. Najważniejsze problemy: [wymień problemy znalezione przez agentów]
+2. Ogólna ocena: [ocena 1-10 na podstawie liczby i ważności problemów znalezionych przez agentów]
+3. Rekomendacja: [krótka rekomendacja na podstawie problemów znalezionych przez agentów]
+
+Odpowiadaj po polsku, zwięźle i konkretnie. Używaj TYLKO informacji z analiz agentów powyżej."""
 
     def __init__(self, session: Session):
         """Inicjalizacja orchestratora."""
@@ -234,14 +244,34 @@ Odpowiedz w formacie JSON:
                 # Parsuj odpowiedź
                 issues, analysis = self._parse_agent_response(response, role)
                 all_issues.extend(issues)
-                agent_analyses[role] = analysis
+                
+                # Store actual raw response from agent, not just parsed analysis
+                # This ensures we're using REAL agent responses, not generated summaries
+                if analysis:
+                    agent_analyses[role] = analysis
+                else:
+                    # Fallback: use raw response if analysis is empty
+                    agent_analyses[role] = response[:500] if response else f"Agent {role} nie zwrócił odpowiedzi"
+                
+                logger.info(f"Zespół {team_name}, {role}: znaleziono {len(issues)} problemów, analiza: {analysis[:100] if analysis else 'brak'}...")
 
             except Exception as e:
                 logger.warning(f"Zespół {team_name}, {role} failed: {e}")
                 agent_analyses[role] = f"Błąd: {str(e)[:200]}"
 
-        # Wygeneruj podsumowanie
-        summary = await self._generate_summary(agent_analyses, api_keys, team_config)
+        # Log actual agent analyses before generating summary
+        logger.info(f"Zespół {team_name}: Analizy od agentów:")
+        for role, analysis in agent_analyses.items():
+            logger.info(f"  - {role}: {analysis[:200] if analysis else 'BRAK ANALIZY'}...")
+        
+        # Wygeneruj podsumowanie TYLKO jeśli mamy jakiekolwiek analizy
+        if not agent_analyses or not any(agent_analyses.values()):
+            logger.warning(f"Zespół {team_name}: Brak analiz od agentów - używam fallback summary")
+            summary = f"Zespół {team_name} nie dostarczył analiz. Wszyscy agenci zwrócili błędy lub puste odpowiedzi."
+        else:
+            summary = await self._generate_summary(agent_analyses, api_keys, team_config)
+        
+        logger.info(f"Zespół {team_name}: Wygenerowano podsumowanie: {summary[:200] if summary else 'BRAK'}...")
 
         return TeamResultSchema(issues=all_issues, summary=summary)
 
@@ -320,6 +350,9 @@ Odpowiedz w formacie JSON:
         api_key = api_keys.get(provider) if api_keys else None
 
         try:
+            logger.info(f"🔄 Generowanie podsumowania dla zespołu z {len(agent_analyses)} analizami od agentów...")
+            logger.debug(f"📝 Rzeczywiste analizy od agentów:\n{analyses_text[:1000]}...")
+            
             response, _, _ = await provider_router.generate(
                 messages=messages,
                 provider_name=provider,
@@ -328,7 +361,19 @@ Odpowiedz w formacie JSON:
                 max_tokens=1024,
                 api_key=api_key
             )
+            
+            logger.info(f"✅ Wygenerowano podsumowanie ({len(response)} chars): {response[:200]}...")
+            
+            # Validate that summary is not a placeholder or generated without agent data
+            if not response or len(response.strip()) < 20:
+                logger.warning("Summary too short or empty - using fallback")
+                return "Podsumowanie niedostępne - agenci nie dostarczyli wystarczających danych."
+            
             return response
         except Exception as e:
-            logger.warning(f"Summary generation failed: {e}")
+            logger.warning(f"Summary generation failed: {e}", exc_info=True)
+            # Return a summary based on issues count if available
+            total_issues = sum(1 for a in agent_analyses.values() if a and "problem" in a.lower())
+            if total_issues > 0:
+                return f"Znaleziono problemy w kodzie. Agenci zidentyfikowali {total_issues} problemów."
             return f"Podsumowanie niedostępne (błąd: {str(e)[:100]})"

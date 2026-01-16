@@ -184,7 +184,7 @@ export function CodeEditor({
         </div>
 
         {/* Editor */}
-        <div className={isFullscreen ? 'flex-1' : ''} style={isFullscreen ? {} : { height }}>
+        <div className={isFullscreen ? 'flex-1 overflow-hidden' : 'overflow-hidden'} style={isFullscreen ? {} : { height }}>
           <Editor
             height={isFullscreen ? '100%' : height}
             language={mappedLanguage}
@@ -197,15 +197,16 @@ export function CodeEditor({
               minimap: { enabled: !isFullscreen ? false : true },
               fontSize: 14,
               lineNumbers: 'on',
-              scrollBeyondLastLine: false,
+              scrollBeyondLastLine: true,
               automaticLayout: true,
               tabSize: 2,
-              wordWrap: 'on',
+              wordWrap: 'off',
               padding: { top: 10, bottom: 10 },
               renderLineHighlight: 'all',
               scrollbar: {
                 verticalScrollbarSize: 10,
                 horizontalScrollbarSize: 10,
+                alwaysConsumeMouseWheel: true,
               },
               folding: true,
               bracketPairColorization: { enabled: true },

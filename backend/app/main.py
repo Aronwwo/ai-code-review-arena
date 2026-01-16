@@ -92,13 +92,24 @@ async def cors_middleware(request: Request, call_next):
         logger.info(f"Handling OPTIONS preflight for origin: {origin}")
         if origin in allowed_origins:
             logger.info("Origin allowed, returning CORS headers with credentials")
+            # Get requested headers from the request
+            requested_headers = request.headers.get("Access-Control-Request-Headers", "")
+            # Build allowed headers list - must be explicit when credentials are used
+            allowed_headers = "Content-Type, Authorization, X-CSRF-Token"
+            if requested_headers:
+                # Add any additional requested headers
+                requested_list = [h.strip() for h in requested_headers.split(",")]
+                for h in requested_list:
+                    if h and h not in allowed_headers:
+                        allowed_headers = f"{allowed_headers}, {h}"
+            
             return JSONResponse(
                 content={},
                 headers={
                     "Access-Control-Allow-Origin": origin,
                     "Access-Control-Allow-Credentials": "true",
                     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Headers": allowed_headers,
                     "Access-Control-Max-Age": "600",
                 }
             )

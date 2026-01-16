@@ -59,7 +59,7 @@ export function CodeViewer({
           </Button>
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
         <SyntaxHighlighter
           language={language}
           style={vscDarkPlus}
