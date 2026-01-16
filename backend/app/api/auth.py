@@ -168,6 +168,8 @@ async def login(
 
     Rate limited to 5 attempts per minute per IP address to prevent brute force attacks.
     """
+    logger.info(f"Login attempt for email: {credentials.email}")
+
     # Apply login-specific rate limiting (5 attempts per minute)
     check_rate_limit(request, user_id=None, limit=5)
 
@@ -175,7 +177,13 @@ async def login(
     statement = select(User).where(User.email == credentials.email)
     user = session.exec(statement).first()
 
+    logger.info(f"User found: {user is not None}")
+    if user:
+        password_valid = verify_password(credentials.password, user.hashed_password)
+        logger.info(f"Password valid: {password_valid}")
+
     if not user or not verify_password(credentials.password, user.hashed_password):
+        logger.warning(f"Login failed for: {credentials.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

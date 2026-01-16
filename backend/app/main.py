@@ -67,15 +67,49 @@ app = FastAPI(
 # ==================== CORS MIDDLEWARE ====================
 # Cross-Origin Resource Sharing - pozwala frontendowi (localhost:3000)
 # wysyłać requesty do backendu (localhost:8000)
-# Domeny są konfigurowane w .env przez CORS_ORIGINS (domyślnie localhost:3000,5173)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),  # Z config.py - tylko dozwolone domeny
-    allow_credentials=False,  # Nie wysyłamy cookies cross-origin
-    allow_methods=["*"],  # Wszystkie metody: GET, POST, PUT, DELETE, PATCH
-    allow_headers=["*"],  # Wszystkie headery (Authorization, Content-Type, etc.)
-)
+# Development: akceptuj wszystkie localhost porty używane przez Vite
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:3004",
+    "http://localhost:3005",
+    "http://localhost:5173",
+    "http://localhost:8000",
+    "http://localhost:8001",
+]
 
+# Custom CORS middleware that actually works
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    """Custom CORS middleware with credentials support."""
+    origin = request.headers.get("origin")
+    logger.info(f"CORS middleware: method={request.method}, origin={origin}")
+
+    # Handle preflight requests
+    if request.method == "OPTIONS":
+        logger.info(f"Handling OPTIONS preflight for origin: {origin}")
+        if origin in allowed_origins:
+            logger.info("Origin allowed, returning CORS headers with credentials")
+            return JSONResponse(
+                content={},
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Max-Age": "600",
+                }
+            )
+
+    # Handle regular requests
+    response = await call_next(request)
+    if origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 # ==================== RATE LIMITING MIDDLEWARE ====================
