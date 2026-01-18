@@ -51,23 +51,23 @@ class ConversationOrchestrator:
     COUNCIL_ROLES = [
         {
             "id": "general",
-            "name": "Recenzent Ogólny",
-            "prompt": "Skup się na ogólnej jakości kodu, błędach logicznych i najlepszych praktykach. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
+            "name": "Ekspert Poprawności Kodu",
+            "prompt": "Jesteś ekspertem od poprawności kodu. Skup się WYŁĄCZNIE na błędach składniowych, logicznych i bugach. IGNORUJ bezpieczeństwo, wydajność i styl (inni agenci się tym zajmą). Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
         {
             "id": "security",
             "name": "Ekspert Bezpieczeństwa",
-            "prompt": "Skup się na podatnościach (SQLi/XSS), auth/authz, ekspozycji danych i konfiguracjach. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
+            "prompt": "Jesteś ekspertem od bezpieczeństwa. Skup się WYŁĄCZNIE na podatnościach bezpieczeństwa (SQLi/XSS), auth/authz, wyciekach danych, podatnych zależnościach. IGNORUJ błędy składniowe/logiczne, wydajność i styl (inni agenci się tym zajmą). Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
         {
             "id": "performance",
-            "name": "Analityk Wydajności",
-            "prompt": "Skup się na wydajności, złożoności, N+1, pamięci i możliwościach cache. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
+            "name": "Ekspert Wydajności",
+            "prompt": "Jesteś ekspertem od wydajności. Skup się WYŁĄCZNIE na problemach wydajnościowych: złożoności algorytmicznej, N+1 queries, pamięci, cache, async/await, I/O operations. IGNORUJ błędy składniowe/logiczne, bezpieczeństwo i styl (inni agenci się tym zajmą). Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
         {
             "id": "style",
-            "name": "Specjalista Jakości Kodu",
-            "prompt": "Skup się na spójności, czytelności, konwencjach i code smellach. Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
+            "name": "Ekspert Jakości i Stylu",
+            "prompt": "Jesteś ekspertem od jakości i stylu kodu. Skup się WYŁĄCZNIE na: nazewnictwie, formatowaniu, dokumentacji, code smells, type hints, struktura kodu, clean code principles (SOLID, DRY, KISS). IGNORUJ błędy składniowe/logiczne, bezpieczeństwo i wydajność (inni agenci się tym zajmą). Odpowiadaj krótko, rzeczowo i tylko w ramach tej roli. Preferuj język polski; jeśli nie możesz, użyj angielskiego. Dbaj o szybkie odpowiedzi i ograniczaj długość."
         },
     ]
 

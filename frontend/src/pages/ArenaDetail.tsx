@@ -17,6 +17,8 @@ export function ArenaDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [voteComment, setVoteComment] = useState('');
+  const [expandedIssueA, setExpandedIssueA] = useState<number | null>(null);
+  const [expandedIssueB, setExpandedIssueB] = useState<number | null>(null);
 
   // Fetch arena session
   const { data: session, isLoading, error } = useQuery<ArenaSession>({
@@ -27,7 +29,6 @@ export function ArenaDetail() {
     },
     enabled: !!id,
     refetchInterval: (query) => {
-      // Poll while running
       const data = query.state.data;
       if (data?.status === 'running' || data?.status === 'pending') {
         return 3000;
@@ -81,38 +82,77 @@ export function ArenaDetail() {
   };
 
   const renderIssues = (issues: ArenaIssue[], teamName: string) => {
+    const isTeamA = teamName === 'A';
+    const expandedIndex = isTeamA ? expandedIssueA : expandedIssueB;
+    const setExpandedIndex = isTeamA ? setExpandedIssueA : setExpandedIssueB;
+
     if (issues.length === 0) {
       return (
         <div className="text-center py-8 text-muted-foreground">
           <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-          <p>Zespół {teamName} nie znalazł żadnych problemów</p>
+          <p>Model {teamName} nie znalazł żadnych problemów</p>
         </div>
       );
     }
 
     return (
       <div className="space-y-3">
-        {issues.map((issue, index) => (
-          <div key={index} className="border rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              {getSeverityIcon(issue.severity)}
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium">{issue.title}</span>
-                  {getSeverityBadge(issue.severity)}
-                  <Badge variant="outline">{issue.category}</Badge>
+        {issues.map((issue, index) => {
+          const isExpanded = expandedIndex === index;
+          const hasDetails = issue.explanation || issue.suggested_code;
+
+          return (
+            <div key={index} className="border rounded-lg overflow-hidden">
+              <div
+                className={`p-4 ${hasDetails ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                onClick={() => hasDetails && setExpandedIndex(isExpanded ? null : index)}
+              >
+                <div className="flex items-start gap-3">
+                  {getSeverityIcon(issue.severity)}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium">{issue.title}</span>
+                      {getSeverityBadge(issue.severity)}
+                      <Badge variant="outline">{issue.category}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{issue.description}</p>
+                    {issue.file_name && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Plik: {issue.file_name}
+                        {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
+                      </p>
+                    )}
+                    {hasDetails && (
+                      <button className="text-xs text-primary mt-2 hover:underline">
+                        {isExpanded ? '▼ Zwiń szczegóły' : '▶ Rozwiń szczegóły'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground">{issue.description}</p>
-                {issue.file_name && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Plik: {issue.file_name}
-                    {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
-                  </p>
-                )}
               </div>
+
+              {/* Expanded details */}
+              {isExpanded && hasDetails && (
+                <div className="border-t bg-muted/30 p-4 space-y-3">
+                  {issue.explanation && (
+                    <div>
+                      <p className="text-sm font-medium mb-1">Wyjaśnienie:</p>
+                      <p className="text-sm text-muted-foreground">{issue.explanation}</p>
+                    </div>
+                  )}
+                  {issue.suggested_code && (
+                    <div>
+                      <p className="text-sm font-medium mb-1">Sugerowana naprawa:</p>
+                      <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">
+                        <code>{issue.suggested_code}</code>
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -206,7 +246,7 @@ export function ArenaDetail() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
-              <p>Zespoły analizują kod... To może potrwać kilka minut.</p>
+              <p>Modele analizują kod... To może potrwać kilka minut.</p>
             </div>
           </CardContent>
         </Card>
@@ -218,7 +258,7 @@ export function ArenaDetail() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
               <div>
-                <p className="font-medium text-red-600">Wystapil blad podczas analizy</p>
+                <p className="font-medium text-red-600">Wystąpił błąd podczas analizy</p>
                 {session.error_message && (
                   <p className="text-sm text-muted-foreground mt-1">{session.error_message}</p>
                 )}
@@ -238,7 +278,7 @@ export function ArenaDetail() {
                 <p className="font-medium text-green-600">
                   {session.winner === 'tie'
                     ? 'Wynik: Remis!'
-                    : `Zwycięzca: Zespół ${session.winner}!`}
+                    : `Zwycięzca: Model ${session.winner}!`}
                 </p>
                 {session.vote_comment && (
                   <p className="text-sm text-muted-foreground mt-1">
@@ -261,13 +301,13 @@ export function ArenaDetail() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-blue-500" />
-                    <CardTitle>Zespół A</CardTitle>
+                    <CardTitle>Model A</CardTitle>
                     {session.winner === 'A' && (
                       <Trophy className="h-5 w-5 text-yellow-500" />
                     )}
                   </div>
                   <Badge variant="outline">
-                    {session.team_a_issues?.length || 0} problemow
+                    {session.team_a_issues?.length || 0} problemów
                   </Badge>
                 </div>
                 <CardDescription>
@@ -282,61 +322,7 @@ export function ArenaDetail() {
                 {session.team_a_summary && (
                   <div className="bg-muted/50 p-4 rounded-lg">
                     <p className="text-sm font-medium mb-2">Podsumowanie</p>
-                    <div className="text-sm whitespace-pre-wrap space-y-2">
-                      {(() => {
-                        // Try to format summary - if it looks like JSON, parse and format it nicely
-                        const summary = session.team_a_summary;
-                        try {
-                          // Check if summary contains JSON
-                          if (summary.trim().startsWith('{') || summary.trim().startsWith('[')) {
-                            const parsed = JSON.parse(summary);
-                            // If it's a structured object, format it nicely
-                            if (parsed.summary && parsed.issues) {
-                              return (
-                                <div className="space-y-2">
-                                  {parsed.summary && (
-                                    <p className="font-medium">{parsed.summary}</p>
-                                  )}
-                                  {parsed.overall_quality && (
-                                    <p className="text-muted-foreground">{parsed.overall_quality}</p>
-                                  )}
-                                </div>
-                              );
-                            }
-                          }
-                        } catch {
-                          // Not JSON, display as text
-                        }
-                        // Display as formatted text (split by lines, format numbered lists)
-                        const lines = summary.split('\n');
-                        return (
-                          <div className="space-y-1">
-                            {lines.map((line, idx) => {
-                              const trimmed = line.trim();
-                              // Format numbered lists (1., 2., etc.)
-                              if (/^\d+\.\s/.test(trimmed)) {
-                                return (
-                                  <div key={idx} className="pl-4">
-                                    <span className="font-medium">{trimmed}</span>
-                                  </div>
-                                );
-                              }
-                              // Format headers (text followed by colon)
-                              if (trimmed.endsWith(':') && idx < 3) {
-                                return (
-                                  <p key={idx} className="font-medium mt-2">{trimmed}</p>
-                                );
-                              }
-                              return (
-                                <p key={idx} className={trimmed ? '' : 'text-transparent select-none'}>
-                                  {trimmed || ' '}
-                                </p>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-                    </div>
+                    <div className="text-sm whitespace-pre-wrap">{session.team_a_summary}</div>
                   </div>
                 )}
                 <div>
@@ -352,13 +338,13 @@ export function ArenaDetail() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-red-500" />
-                    <CardTitle>Zespół B</CardTitle>
+                    <CardTitle>Model B</CardTitle>
                     {session.winner === 'B' && (
                       <Trophy className="h-5 w-5 text-yellow-500" />
                     )}
                   </div>
                   <Badge variant="outline">
-                    {session.team_b_issues?.length || 0} problemow
+                    {session.team_b_issues?.length || 0} problemów
                   </Badge>
                 </div>
                 <CardDescription>
@@ -373,61 +359,7 @@ export function ArenaDetail() {
                 {session.team_b_summary && (
                   <div className="bg-muted/50 p-4 rounded-lg">
                     <p className="text-sm font-medium mb-2">Podsumowanie</p>
-                    <div className="text-sm whitespace-pre-wrap space-y-2">
-                      {(() => {
-                        // Try to format summary - if it looks like JSON, parse and format it nicely
-                        const summary = session.team_b_summary;
-                        try {
-                          // Check if summary contains JSON
-                          if (summary.trim().startsWith('{') || summary.trim().startsWith('[')) {
-                            const parsed = JSON.parse(summary);
-                            // If it's a structured object, format it nicely
-                            if (parsed.summary && parsed.issues) {
-                              return (
-                                <div className="space-y-2">
-                                  {parsed.summary && (
-                                    <p className="font-medium">{parsed.summary}</p>
-                                  )}
-                                  {parsed.overall_quality && (
-                                    <p className="text-muted-foreground">{parsed.overall_quality}</p>
-                                  )}
-                                </div>
-                              );
-                            }
-                          }
-                        } catch {
-                          // Not JSON, display as text
-                        }
-                        // Display as formatted text (split by lines, format numbered lists)
-                        const lines = summary.split('\n');
-                        return (
-                          <div className="space-y-1">
-                            {lines.map((line, idx) => {
-                              const trimmed = line.trim();
-                              // Format numbered lists (1., 2., etc.)
-                              if (/^\d+\.\s/.test(trimmed)) {
-                                return (
-                                  <div key={idx} className="pl-4">
-                                    <span className="font-medium">{trimmed}</span>
-                                  </div>
-                                );
-                              }
-                              // Format headers (text followed by colon)
-                              if (trimmed.endsWith(':') && idx < 3) {
-                                return (
-                                  <p key={idx} className="font-medium mt-2">{trimmed}</p>
-                                );
-                              }
-                              return (
-                                <p key={idx} className={trimmed ? '' : 'text-transparent select-none'}>
-                                  {trimmed || ' '}
-                                </p>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-                    </div>
+                    <div className="text-sm whitespace-pre-wrap">{session.team_b_summary}</div>
                   </div>
                 )}
                 <div>
@@ -447,14 +379,14 @@ export function ArenaDetail() {
                   Zagłosuj na zwycięzcę
                 </CardTitle>
                 <CardDescription>
-                  Który zespół dał lepsze wyniki analizy kodu? Twój głos wpływa na ranking ELO zespołów.
+                  Który model dał lepsze wyniki analizy kodu? Twój głos wpływa na ranking ELO.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Komentarz (opcjonalnie)</Label>
                   <Textarea
-                    placeholder="Dlaczego wybrałeś ten zespół?"
+                    placeholder="Dlaczego wybrałeś ten model?"
                     value={voteComment}
                     onChange={(e) => setVoteComment(e.target.value)}
                     rows={3}
@@ -469,7 +401,7 @@ export function ArenaDetail() {
                     disabled={voteMutation.isPending}
                   >
                     <ThumbsUp className="mr-2 h-5 w-5 text-blue-500" />
-                    Zespół A wygrywa
+                    Model A wygrywa
                   </Button>
                   <Button
                     size="lg"
@@ -489,7 +421,7 @@ export function ArenaDetail() {
                     disabled={voteMutation.isPending}
                   >
                     <ThumbsDown className="mr-2 h-5 w-5 text-red-500" />
-                    Zespół B wygrywa
+                    Model B wygrywa
                   </Button>
                 </div>
                 {voteMutation.isPending && (

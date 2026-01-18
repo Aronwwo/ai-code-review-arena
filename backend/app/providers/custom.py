@@ -84,19 +84,105 @@ class CustomProvider(LLMProvider):
             auth_value = f"{self.header_prefix}{self.api_key}"
             headers[self.header_name] = auth_value
 
-        # Make request to custom API
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json={
-                    "model": model,
-                    "messages": openai_messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                }
-            )
-            response.raise_for_status()
+        # Build request payload
+        request_payload = {
+            "model": model,
+            "messages": openai_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
 
-            result = response.json()
-            return result["choices"][0]["message"]["content"]
+        # JSON Schema disabled for Perplexity - it causes mock/placeholder responses
+        # Perplexity will return plain JSON based on the prompt instructions instead
+
+        # Make request to custom API
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=request_payload
+                )
+                response.raise_for_status()
+
+                result = response.json()
+                content = result["choices"][0]["message"]["content"]
+                
+                # For Perplexity reasoning models, remove <think> sections if present
+                if self.provider_id == "perplexity" or "perplexity" in self.provider_name.lower():
+                    content = self._clean_perplexity_response(content)
+                
+                return content
+        except httpx.HTTPStatusError as e:
+            # Handle specific HTTP error codes with helpful messages
+            status_code = e.response.status_code
+            
+            if status_code == 402:
+                # 402 Payment Required - API key issue or billing problem
+                error_msg = (
+                    f"Błąd płatności dla providera '{self.provider_name}'. "
+                    f"Sprawdź czy Twój API key jest ważny i czy konto ma wystarczające środki. "
+                    f"Kod błędu: {status_code}"
+                )
+                raise ValueError(error_msg) from e
+            elif status_code == 401:
+                # 401 Unauthorized - Invalid API key
+                error_msg = (
+                    f"Błąd autoryzacji dla providera '{self.provider_name}'. "
+                    f"Sprawdź czy Twój API key jest poprawny. "
+                    f"Kod błędu: {status_code}"
+                )
+                raise ValueError(error_msg) from e
+            elif status_code == 429:
+                # 429 Too Many Requests - Rate limit
+                error_msg = (
+                    f"Przekroczono limit zapytań dla providera '{self.provider_name}'. "
+                    f"Poczekaj chwilę i spróbuj ponownie. "
+                    f"Kod błędu: {status_code}"
+                )
+                raise ValueError(error_msg) from e
+            elif status_code == 404:
+                # 404 Not Found - Model or endpoint not found
+                error_msg = (
+                    f"Model '{model}' lub endpoint nie został znaleziony dla providera '{self.provider_name}'. "
+                    f"Sprawdź czy nazwa modelu jest poprawna. "
+                    f"Kod błędu: {status_code}"
+                )
+                raise ValueError(error_msg) from e
+            else:
+                # Generic HTTP error
+                error_text = e.response.text[:200] if e.response.text else "Brak szczegółów"
+                error_msg = (
+                    f"Błąd HTTP {status_code} dla providera '{self.provider_name}': {error_text}"
+                )
+                raise ValueError(error_msg) from e
+        except httpx.RequestError as e:
+            # Network errors
+            error_msg = f"Błąd sieci dla providera '{self.provider_name}': {str(e)[:200]}"
+            raise ValueError(error_msg) from e
+    
+    def _clean_perplexity_response(self, content: str) -> str:
+        """Clean Perplexity response by removing <think> sections.
+        
+        Reasoning models (sonar-reasoning-pro) include <think> sections
+        that need to be removed before parsing JSON.
+        
+        Args:
+            content: Raw response content
+            
+        Returns:
+            Cleaned content with <think> sections removed
+        """
+        import re
+        
+        # Remove <think>...</think> sections (multiline)
+        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+        
+        # Remove standalone <think> tags
+        content = re.sub(r'<think>.*?$', '', content, flags=re.DOTALL | re.MULTILINE)
+        content = re.sub(r'^.*?</think>', '', content, flags=re.DOTALL | re.MULTILINE)
+        
+        # Clean up extra whitespace
+        content = content.strip()
+        
+        return content

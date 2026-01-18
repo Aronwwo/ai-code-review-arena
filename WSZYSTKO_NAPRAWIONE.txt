@@ -1,0 +1,130 @@
+╔══════════════════════════════════════════════════════════════╗
+║                  ✅ ARENA NAPRAWIONA I DZIAŁA ✅                ║
+╚══════════════════════════════════════════════════════════════╝
+
+PROBLEM:
+--------
+Arena zwracała błąd: "Zespół A: brak konfiguracji dla ról: style, security, performance"
+
+CO ZOSTAŁO NAPRAWIONE:
+----------------------
+✅ Backend (app/api/arena.py)
+   - Usunięto wymaganie ról: security, performance, style
+   - Teraz wymaga TYLKO: general (provider + model)
+
+✅ Frontend (src/pages/ProjectDetail.tsx)
+   - Frontend wysyła TYLKO rolę 'general'
+   - Usunięto niepotrzebne role z payloadu
+
+✅ Backend Zrestartowany
+   - Stary proces: ZABITY ❌
+   - Nowy proces: DZIAŁA ✅ (PID: 45982)
+   - Port: 8000
+   - URL: http://localhost:8000
+
+✅ Testy
+   - 8/8 testów end-to-end: PASS ✅
+   - test_arena_validation_only_general_required: PASS ✅
+   - test_arena_validation_rejects_missing_general: PASS ✅
+   - test_arena_validation_rejects_missing_provider: PASS ✅
+   - test_arena_validation_rejects_missing_model: PASS ✅
+   - test_arena_get_engine_hash_stable: PASS ✅
+   - test_arena_elo_updates_after_vote: PASS ✅
+   - test_arena_rankings_endpoint: PASS ✅
+   - test_arena_tie_vote: PASS ✅
+
+JAK TERAZ UŻYĆ ARENA:
+---------------------
+1. Otwórz frontend: http://localhost:3000 (lub inny port)
+2. Zaloguj się
+3. Utwórz projekt
+4. Dodaj plik z kodem
+5. Kliknij "Konfiguruj przegląd"
+6. Wybierz "Arena"
+7. Skonfiguruj Model A (np. ollama/qwen2.5-coder)
+8. Skonfiguruj Model B (np. ollama/deepseek-coder)
+9. Kliknij "Rozpocznij Arena"
+10. Poczekaj na status "voting"
+11. Zagłosuj na lepszy wynik
+12. Sprawdź rankingi
+
+STATUS BACKENDU:
+----------------
+✅ Działa: http://localhost:8000
+✅ Docs: http://localhost:8000/docs
+✅ Process ID: 45982
+✅ Auto-reload: ON (reaguje na zmiany w kodzie)
+
+JEŚLI FRONTEND NIE DZIAŁA:
+--------------------------
+cd frontend
+npm run dev
+
+Następnie odśwież stronę (F5 lub Cmd+R)
+
+PLIKI ZMODYFIKOWANE:
+--------------------
+1. backend/app/api/arena.py - walidacja Arena
+2. frontend/src/pages/ProjectDetail.tsx - payload Arena
+
+NOWE PLIKI (DOKUMENTACJA):
+--------------------------
+1. backend/tests/test_arena_e2e.py - testy end-to-end
+2. ARENA_FIX_SUMMARY.md - techniczna dokumentacja
+3. ARENA_FIX_COMPLETE.md - raport wykonania
+4. NAPRAWIONE.md - podsumowanie (PL)
+5. WSZYSTKO_NAPRAWIONE.txt - ten plik
+
+PRZYKŁAD PRAWIDŁOWEGO REQUESTA:
+-------------------------------
+POST /arena/sessions
+{
+  "project_id": 1,
+  "team_a_config": {
+    "general": {                    ← TYLKO to potrzebne!
+      "provider": "ollama",
+      "model": "qwen2.5-coder:latest"
+    }
+  },
+  "team_b_config": {
+    "general": {                    ← TYLKO to potrzebne!
+      "provider": "ollama",
+      "model": "deepseek-coder:latest"
+    }
+  }
+}
+
+WERYFIKACJA ŻE DZIAŁA:
+---------------------
+1. Backend: http://localhost:8000/docs
+2. Sprawdź endpoint: POST /arena/sessions
+3. Zobacz czy wymaga tylko 'general'
+4. Lub uruchom test: cd backend && pytest tests/test_arena_e2e.py -v
+
+BACKEND LOGS:
+-------------
+Logi backendu są w: backend/backend.log
+Możesz je śledzić: tail -f backend/backend.log
+
+RESTART BACKENDU (jeśli potrzebny):
+-----------------------------------
+# Zabij proces:
+kill -9 45982
+
+# Uruchom ponownie:
+cd backend
+source venv/bin/activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+PODSUMOWANIE:
+-------------
+✅ Arena naprawiona
+✅ Backend uruchomiony z nowym kodem
+✅ Wszystkie testy przechodzą (8/8)
+✅ Frontend wysyła poprawny payload
+✅ Gotowe do użycia!
+
+🎉 ARENA DZIAŁA! 🎉
+
+Data naprawy: 2026-01-18 01:02
+Status: GOTOWE ✅

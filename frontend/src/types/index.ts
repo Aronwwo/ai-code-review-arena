@@ -81,6 +81,7 @@ export interface Review {
   issue_count: number;
   review_mode?: ReviewMode;
   summary?: string | null;
+  models?: string[]; // List of provider/model combinations (e.g., ['gemini/gemini-2.5-flash', 'groq/llama3'])
 }
 
 export interface AgentConfig {
@@ -105,7 +106,6 @@ export interface ReviewCreate {
   provider?: string;
   model?: string;
   agent_configs?: Record<string, AgentConfig>;
-  moderator_config: AgentConfig;
   api_keys?: Record<string, string>;
 }
 
@@ -130,6 +130,7 @@ export interface Issue {
   category: string;
   title: string;
   description: string;
+  agent_role: string | null;  // Which agent found this issue (general, security, performance, style)
   file_name: string | null;
   line_start: number | null;
   line_end: number | null;
@@ -155,7 +156,7 @@ export interface IssueWithSuggestions extends Issue {
 }
 
 // Conversation types
-export type ConversationMode = 'cooperative' | 'adversarial' | 'council' | 'arena';
+export type ConversationMode = 'cooperative' | 'adversarial' | 'council';
 export type ConversationStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type SenderType = 'agent' | 'user' | 'moderator';
 
@@ -204,9 +205,9 @@ export type ArenaWinner = 'A' | 'B' | 'tie';
 
 export interface ArenaTeamConfig {
   general: AgentConfig;
-  security: AgentConfig;
-  performance: AgentConfig;
-  style: AgentConfig;
+  security?: AgentConfig;
+  performance?: AgentConfig;
+  style?: AgentConfig;
 }
 
 export interface ArenaIssue {
@@ -217,6 +218,8 @@ export interface ArenaIssue {
   file_name: string | null;
   line_start: number | null;
   line_end: number | null;
+  suggested_code?: string | null;
+  explanation?: string | null;
 }
 
 export interface ArenaSession {

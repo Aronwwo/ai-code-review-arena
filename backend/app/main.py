@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
 # Główna instancja aplikacji FastAPI - to jest serwer HTTP
 app = FastAPI(
     title=settings.app_name,  # "AI Code Review Arena" z config.py
-    description="Multi-agent AI code review with debate capabilities",
+    description="Single-agent AI code review with focused reports",
     version="1.0.0",
     lifespan=lifespan  # Hook dla startup/shutdown
 )
@@ -187,7 +187,7 @@ app.include_router(providers.router)  # /api/providers/* - pomocnicze endpointy 
 app.include_router(websocket.router)  # /ws/* - WebSocket dla real-time updates
 app.include_router(audit.router)  # /audit/* - logi audytowe (admin only)
 app.include_router(rankings.router)  # /rankings/* - rankingi na podstawie review
-app.include_router(arena.router)  # /arena/* - sesje Arena (walki zespołów) i głosowanie
+app.include_router(arena.router)  # /arena/* - sesje Arena (model A vs model B) i głosowanie
 
 
 # ==================== HEALTH CHECK ENDPOINTS ====================

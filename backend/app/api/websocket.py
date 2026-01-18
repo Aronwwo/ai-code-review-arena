@@ -4,6 +4,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from jose import JWTError, jwt
 from app.config import settings
 from app.utils.websocket import ws_manager
+from app.database import Session, engine
+from app.models.review import Review
+from app.models.project import Project
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,8 @@ def verify_ws_token(token: str) -> dict | None:
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm]
         )
+        if payload.get("type") != "access":
+            return None
         return payload
     except JWTError:
         return None
@@ -48,6 +53,21 @@ async def websocket_endpoint(
     if not payload:
         await websocket.close(code=4001, reason="Invalid token")
         return
+    user_id = payload.get("user_id")
+    if not user_id:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    # Verify user has access to the review
+    with Session(engine) as session:
+        review = session.get(Review, review_id)
+        if not review:
+            await websocket.close(code=4004, reason="Review not found")
+            return
+        project = session.get(Project, review.project_id)
+        if not project or project.owner_id != user_id:
+            await websocket.close(code=4003, reason="Not authorized")
+            return
 
     # Connect to the review
     await ws_manager.connect(websocket, review_id)

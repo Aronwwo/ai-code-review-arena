@@ -4,9 +4,12 @@ from pydantic import BaseModel
 import hashlib
 import httpx
 import asyncio
+import logging
 
 from app.api.deps import get_current_user
 from app.utils.cache import cache
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
@@ -122,6 +125,59 @@ async def list_provider_models(
         models = sorted(set(models))
         cache.set(cache_key, models, ttl=300)
         return ProviderModelsResponse(models=models, cached=False)
+
+    if provider_id == "perplexity":
+        # Perplexity uses OpenAI-compatible API format
+        base_url = (data.base_url or "https://api.perplexity.ai").rstrip("/")
+        # Perplexity models endpoint does NOT use /v1 prefix
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+
+        url = f"{base_url}/models"
+        headers: dict[str, str] = {}
+        header_name = data.header_name or "Authorization"
+        header_prefix = data.header_prefix or "Bearer "
+        headers[header_name] = f"{header_prefix}{data.api_key}" if header_prefix else data.api_key
+        
+        try:
+            payload = await _fetch_json_with_retry(url, headers=headers)
+            
+            # Perplexity returns OpenAI format: {"data": [{"id": "model-name", ...}]}
+            models: list[str] = []
+            if isinstance(payload.get("data"), list):
+                models = [item.get("id") for item in payload["data"] if item.get("id")]
+            
+            # Known Perplexity models (fallback if API doesn't return them)
+            known_models = [
+                "sonar",
+                "sonar-pro",
+                "sonar-reasoning",
+                "sonar-reasoning-pro",
+                "sonar-deep-research",
+                "r1-1776"
+            ]
+            
+            # If API returned models, use them; otherwise use known models
+            if models:
+                models = sorted(set(models))
+            else:
+                models = known_models
+                logger.warning("Perplexity API didn't return models, using known models list")
+            
+            cache.set(cache_key, models, ttl=300)
+            return ProviderModelsResponse(models=models, cached=False)
+        except (HTTPException, httpx.HTTPError, Exception) as e:
+            # If API call fails, return known models as fallback
+            known_models = [
+                "sonar",
+                "sonar-pro",
+                "sonar-reasoning",
+                "sonar-reasoning-pro",
+                "sonar-deep-research",
+                "r1-1776"
+            ]
+            logger.warning(f"Perplexity API call failed ({type(e).__name__}: {str(e)[:200]}), using known models list as fallback")
+            return ProviderModelsResponse(models=known_models, cached=False)
 
     if not data.base_url:
         raise HTTPException(

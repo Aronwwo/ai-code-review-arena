@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
-  Users, Swords, Bot, MessageSquare, Loader2,
+  Users, Bot, MessageSquare, Loader2,
   CheckCircle, XCircle, Gavel
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,7 +26,7 @@ interface Message {
 interface Conversation {
   id: number;
   review_id: number;
-  mode: 'council' | 'arena';
+  mode: 'council';
   topic_type: string;
   topic_id?: number;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -43,27 +43,17 @@ interface Conversation {
 interface ConversationViewProps {
   reviewId: number;
   issueId?: number;
-  mode?: 'council' | 'arena';
+  mode?: 'council';
   onClose?: () => void;
 }
 
 const AGENT_COLORS: Record<string, string> = {
   general: 'bg-blue-500',
-  security: 'bg-red-500',
-  performance: 'bg-yellow-500',
-  style: 'bg-purple-500',
-  prosecutor: 'bg-red-600',
-  defender: 'bg-green-600',
   moderator: 'bg-indigo-600',
 };
 
 const AGENT_NAMES: Record<string, string> = {
-  general: 'Ogólny',
-  security: 'Bezpieczeństwo',
-  performance: 'Wydajność',
-  style: 'Styl',
-  prosecutor: 'Prokurator',
-  defender: 'Obrońca',
+  general: 'Poprawność Kodu',
   moderator: 'Moderator',
 };
 
@@ -97,7 +87,7 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
 
   // Start conversation mutation
   const startConversationMutation = useMutation({
-    mutationFn: async (params: { mode: 'council' | 'arena'; issueId?: number }) => {
+    mutationFn: async (params: { mode: 'council'; issueId?: number }) => {
       const response = await api.post(`/reviews/${reviewId}/conversations`, {
         mode: params.mode,
         topic_type: params.issueId ? 'issue' : 'review',
@@ -115,13 +105,8 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
     },
   });
 
-  const handleStartConversation = (conversationMode: 'council' | 'arena') => {
-    // Arena mode requires an issue
-    if (conversationMode === 'arena' && !issueId) {
-      toast.error('Tryb Areny wymaga wybrania konkretnego problemu. Otwórz dyskusję z poziomu konkretnego issue.');
-      return;
-    }
-    startConversationMutation.mutate({ mode: conversationMode, issueId });
+  const handleStartConversation = () => {
+    startConversationMutation.mutate({ mode: 'council', issueId });
   };
 
   const selectedConversation = conversations?.find(c => c.id === activeConversation);
@@ -146,31 +131,21 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
-            Dyskusje Agentów AI
+            Dyskusja agenta
           </h3>
           <p className="text-sm text-muted-foreground">
-            Zobacz jak agenci analizują i dyskutują nad kodem
+            Zobacz jak agent analizuje kod
           </p>
         </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleStartConversation('council')}
+            onClick={handleStartConversation}
             disabled={startConversationMutation.isPending}
           >
             <Users className="h-4 w-4 mr-2" />
             Rozpocznij dyskusję
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleStartConversation('arena')}
-            disabled={startConversationMutation.isPending || !issueId}
-            title={!issueId ? 'Arena wymaga wybrania konkretnego issue' : 'Rozpocznij debatę'}
-          >
-            <Swords className="h-4 w-4 mr-2" />
-            Rozpocznij debatę
           </Button>
         </div>
       </div>
@@ -194,11 +169,7 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
                   <CardContent className="p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        {conv.mode === 'council' ? (
-                          <Users className="h-4 w-4 text-blue-500" />
-                        ) : (
-                          <Swords className="h-4 w-4 text-red-500" />
-                        )}
+                        <Users className="h-4 w-4 text-blue-500" />
                         <span className="text-sm font-medium capitalize">{conv.mode}</span>
                       </div>
                       {getStatusBadge(conv.status)}
@@ -228,13 +199,9 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {selectedConversation.mode === 'council' ? (
-                      <Users className="h-5 w-5 text-blue-500" />
-                    ) : (
-                      <Swords className="h-5 w-5 text-red-500" />
-                    )}
+                    <Users className="h-5 w-5 text-blue-500" />
                     <CardTitle className="text-base capitalize">
-                      Tryb {selectedConversation.mode === 'council' ? 'Rady' : 'Areny'}
+                      Tryb Rady
                     </CardTitle>
                     {getStatusBadge(selectedConversation.status)}
                   </div>
@@ -371,20 +338,11 @@ export function ConversationView({ reviewId, issueId }: ConversationViewProps) {
                 <div className="flex gap-2 justify-center mt-4">
                   <Button
                     variant="outline"
-                    onClick={() => handleStartConversation('council')}
+                    onClick={handleStartConversation}
                     disabled={startConversationMutation.isPending}
                   >
                     <Users className="h-4 w-4 mr-2" />
                     Rozpocznij dyskusję
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleStartConversation('arena')}
-                    disabled={startConversationMutation.isPending || !issueId}
-                    title={!issueId ? 'Arena wymaga wybrania konkretnego issue' : 'Rozpocznij debatę'}
-                  >
-                    <Swords className="h-4 w-4 mr-2" />
-                    Rozpocznij debatę
                   </Button>
                 </div>
               </CardContent>

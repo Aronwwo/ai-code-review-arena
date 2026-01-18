@@ -1,8 +1,8 @@
 """Arena session models - system walki dwóch zespołów AI.
 
 Arena to tryb porównywania dwóch konfiguracji zespołów:
-- Zespół A: 4 agentów (general, security, performance, style) z wybranymi modelami
-- Zespół B: 4 agentów z innymi modelami
+- Zespół A: 1 agent (general) z wybranym modelem
+- Zespół B: 1 agent (general) z innym modelem
 - Oba zespoły analizują ten sam kod
 - Użytkownik głosuje który zespół dał lepszą odpowiedź
 - Na podstawie głosów budowany jest ranking
@@ -36,8 +36,8 @@ class ArenaSession(SQLModel, table=True):
     status: str = Field(default="pending", index=True)
     error_message: str | None = Field(default=None, max_length=2000)
 
-    # Konfiguracje zespołów (JSON z konfiguracją dla każdej roli)
-    # Format: {"general": {"provider": "ollama", "model": "qwen2.5"}, "security": {...}, ...}
+    # Konfiguracje zespołów (JSON z konfiguracją dla roli general)
+    # Format: {"general": {"provider": "ollama", "model": "qwen2.5"}}
     team_a_config: dict = Field(default={}, sa_column=Column(JSON))
     team_b_config: dict = Field(default={}, sa_column=Column(JSON))
 
@@ -60,10 +60,9 @@ class ArenaSession(SQLModel, table=True):
 
 
 class TeamRating(SQLModel, table=True):
-    """Ranking konfiguracji zespołu na podstawie głosów w Arena.
+    """Ranking silnika (provider/model) na podstawie głosów w Arena.
 
-    Każda unikalna konfiguracja (hash 4 modeli) ma swój rating.
-    Rating jest obliczany metodą ELO na podstawie wyników walk.
+    Każdy unikalny silnik (provider/model) ma swój rating ELO.
     """
     __tablename__ = "team_ratings"
 
@@ -72,7 +71,7 @@ class TeamRating(SQLModel, table=True):
     # Hash konfiguracji (SHA-256 z JSON config)
     config_hash: str = Field(max_length=64, unique=True, index=True)
 
-    # Konfiguracja zespołu (dla wyświetlania)
+    # Konfiguracja silnika (dla wyświetlania)
     config: dict = Field(default={}, sa_column=Column(JSON))
 
     # Statystyki ELO

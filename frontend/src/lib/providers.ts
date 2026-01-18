@@ -67,7 +67,7 @@ const BUILT_IN_PROVIDERS: CustomProvider[] = [
     id: 'perplexity',
     name: 'Perplexity',
     description: 'Perplexity AI (API zgodne z OpenAI)',
-    baseUrl: 'https://api.perplexity.ai',
+    baseUrl: 'https://api.perplexity.ai', // Perplexity uses /chat/completions (no /v1)
     models: [], // Requires API key - models will be shown after key is set
     isBuiltIn: true,
     apiKey: ''

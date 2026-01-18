@@ -11,7 +11,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Refresh token settings
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-ACCESS_TOKEN_EXPIRE_MINUTES = 15  # Short-lived access token
+ACCESS_TOKEN_EXPIRE_MINUTES = 45  # Session duration: 45 minutes as requested by user
 
 
 def hash_password(password: str) -> str:
@@ -51,6 +51,8 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     """Decode and verify a JWT access token."""
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        if payload.get("type") != "access":
+            return None
         return payload
     except JWTError:
         return None

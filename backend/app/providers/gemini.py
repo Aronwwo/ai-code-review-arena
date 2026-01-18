@@ -62,9 +62,12 @@ class GeminiProvider(LLMProvider):
         
         if model is None:
             model = "gemini-1.5-flash"  # Stable, free tier model (RECOMMENDED)
-        
+
         # Normalize model name (remove any prefixes/suffixes)
-        model_normalized = model.lower().strip()
+        model = model.strip()
+        if model.startswith("models/"):
+            model = model.replace("models/", "", 1)
+        model_normalized = model.lower()
         
         # Check if model is in free tier list, if not, warn and use fallback
         if model_normalized not in [m.lower() for m in free_tier_models]:
@@ -112,67 +115,149 @@ class GeminiProvider(LLMProvider):
         max_retries = 3
         base_delay = 5.0  # Start with 5 seconds for free tier (was 2s)
         
+        # Try alternative model names if the primary one fails with 404
+        # Some accounts may need versioned model names like gemini-1.5-flash-002
+        model_alternatives = [model]
+        if model == "gemini-1.5-flash":
+            model_alternatives.extend(["gemini-1.5-flash-002", "gemini-1.5-flash-latest"])
+        elif model == "gemini-1.5-pro":
+            model_alternatives.extend(["gemini-1.5-pro-002", "gemini-1.5-pro-latest"])
+        
+        # Try both v1beta and v1 base URLs in case one is unavailable
+        base_urls = [self.base_url.rstrip("/")]
+        if base_urls[0].endswith("/v1beta"):
+            base_urls.append(base_urls[0][:-6] + "/v1")
+        elif base_urls[0].endswith("/v1"):
+            base_urls.append(base_urls[0][:-3] + "/v1beta")
+        base_urls = list(dict.fromkeys(base_urls))
+        
         async with httpx.AsyncClient(timeout=60.0) as client:
             last_error = None
             
-            for attempt in range(max_retries):
-                try:
-                    response = await client.post(
-                        f"{self.base_url}/models/{model}:generateContent",
-                        params={"key": self.api_key},
-                        json={
-                            "contents": gemini_contents,
-                            "generationConfig": {
-                                "temperature": temperature,
-                                "maxOutputTokens": max_tokens,
+            # Try each base URL + model alternative
+            for base_url in base_urls:
+                move_to_next_base = False
+                for model_to_try in model_alternatives:
+                    last_error = None  # Reset error for each model
+                    for attempt in range(max_retries):
+                        try:
+                            # Gemini API accepts key as query parameter (some docs show header, but query param works more reliably)
+                            headers = {
+                                "Content-Type": "application/json"
                             }
-                        }
-                    )
-                    
-                    # Handle 429 (Too Many Requests) with exponential backoff
-                    if response.status_code == 429:
-                        if attempt < max_retries - 1:
-                            delay = base_delay * (2 ** attempt)  # Exponential backoff: 2s, 4s, 8s
-                            logger.warning(
-                                f"Gemini API rate limit (429) hit. Retrying in {delay}s "
-                                f"(attempt {attempt + 1}/{max_retries})"
+                            
+                            response = await client.post(
+                                f"{base_url}/models/{model_to_try}:generateContent",
+                                params={"key": self.api_key},
+                                headers=headers,
+                                json={
+                                    "contents": gemini_contents,
+                                    "generationConfig": {
+                                        "temperature": temperature,
+                                        "maxOutputTokens": max_tokens,
+                                    }
+                                }
                             )
-                            await asyncio.sleep(delay)
-                            continue
-                        else:
-                            # Last attempt - raise error
+                            
+                            # Handle 429 (Too Many Requests) with exponential backoff
+                            if response.status_code == 429:
+                                if attempt < max_retries - 1:
+                                    delay = base_delay * (2 ** attempt)  # Exponential backoff: 2s, 4s, 8s
+                                    logger.warning(
+                                        f"Gemini API rate limit (429) hit. Retrying in {delay}s "
+                                        f"(attempt {attempt + 1}/{max_retries})"
+                                    )
+                                    await asyncio.sleep(delay)
+                                    continue
+                                else:
+                                    # Last attempt - raise error
+                                    response.raise_for_status()
+                            
+                            # If 404 and we have more alternatives, try next model
+                            if response.status_code == 404 and model_to_try != model_alternatives[-1]:
+                                logger.warning(
+                                    f"Gemini model '{model_to_try}' returned 404 at '{base_url}', trying next alternative..."
+                                )
+                                last_error = None  # Clear error to try next model
+                                break  # Break inner loop, try next model
+                            # If 404 and this is the last model, try next base URL if available
+                            if response.status_code == 404 and base_url != base_urls[-1]:
+                                logger.warning(
+                                    f"Gemini model '{model_to_try}' returned 404 at '{base_url}', trying next base URL..."
+                                )
+                                last_error = None
+                                move_to_next_base = True
+                                break
+                            
+                            # For other status codes, raise if not successful
                             response.raise_for_status()
-                    
-                    # For other status codes, raise if not successful
-                    response.raise_for_status()
 
-                    result = response.json()
+                            # Extract text from response
+                            result = response.json()
+                            if "candidates" in result and len(result["candidates"]) > 0:
+                                candidate = result["candidates"][0]
+                                if "content" in candidate and "parts" in candidate["content"]:
+                                    parts = candidate["content"]["parts"]
+                                    if len(parts) > 0 and "text" in parts[0]:
+                                        if model_to_try != model:
+                                            logger.info(
+                                                f"✅ Gemini API call succeeded with alternative model '{model_to_try}' "
+                                                f"(original: '{model}')"
+                                            )
+                                        elif attempt > 0:
+                                            logger.info(f"✅ Gemini API call succeeded after {attempt} retry(ies)")
+                                        return parts[0]["text"]
 
-                    # Extract text from response
-                    if "candidates" in result and len(result["candidates"]) > 0:
-                        candidate = result["candidates"][0]
-                        if "content" in candidate and "parts" in candidate["content"]:
-                            parts = candidate["content"]["parts"]
-                            if len(parts) > 0 and "text" in parts[0]:
-                                if attempt > 0:
-                                    logger.info(f"✅ Gemini API call succeeded after {attempt} retry(ies)")
-                                return parts[0]["text"]
-
-                    raise ValueError("Unexpected Gemini API response format")
-                    
-                except httpx.HTTPStatusError as e:
-                    last_error = e
-                    if e.response.status_code == 429 and attempt < max_retries - 1:
-                        # Already handled above, but just in case
-                        continue
-                    # For other HTTP errors, raise immediately
-                    raise
-                except Exception as e:
-                    last_error = e
-                    # For non-HTTP errors, don't retry
-                    raise
+                            raise ValueError("Unexpected Gemini API response format")
+                            
+                        except httpx.HTTPStatusError as e:
+                            last_error = e
+                            if e.response.status_code == 429 and attempt < max_retries - 1:
+                                # Already handled above, but just in case
+                                continue
+                            elif e.response.status_code == 404:
+                                # 404 means model not found - try next alternative if available
+                                if model_to_try != model_alternatives[-1]:
+                                    # Try next model alternative
+                                    last_error = None  # Clear error to try next model
+                                    break  # Break attempt loop, continue with next model
+                                if base_url != base_urls[-1]:
+                                    # Try next base URL
+                                    last_error = None
+                                    move_to_next_base = True
+                                    break
+                                
+                                # Last alternative failed - log error
+                                error_detail = ""
+                                try:
+                                    error_json = e.response.json()
+                                    error_detail = error_json.get("error", {}).get("message", "")
+                                except:
+                                    error_detail = e.response.text[:200] if e.response.text else ""
+                                
+                                logger.error(
+                                    f"❌ Gemini API 404 error for all model alternatives. "
+                                    f"Tried: {model_alternatives}. "
+                                    f"Last URL: {e.request.url}. "
+                                    f"Error: {error_detail}. "
+                                    f"This usually means the models are not available or the endpoint URL is incorrect."
+                                )
+                                # Raise error if all alternatives failed
+                                raise
+                            # For other HTTP errors, raise immediately
+                            raise
+                        except Exception as e:
+                            last_error = e
+                            # For non-HTTP errors, don't retry
+                            raise
+                        if move_to_next_base:
+                            break
+                    if move_to_next_base:
+                        break
+                if move_to_next_base:
+                    continue
             
-            # If we get here, all retries failed
+            # If we get here, all models failed - raise the last error
             if last_error:
                 raise last_error
-            raise ValueError("Gemini API call failed after all retries")
+            raise ValueError("Gemini API call failed for all model alternatives")

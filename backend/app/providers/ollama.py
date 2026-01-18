@@ -125,8 +125,9 @@ class OllamaProvider(LLMProvider):
         logger.debug(f"Ollama Request Prompt (first 500 chars):\n{prompt[:500]}...")
 
         # Make request to Ollama with retry on timeout
-        # Increased timeout to 120s for large models that need loading time
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        # Increased timeout to 300s (5 min) for large models that need loading time
+        # This matches the agent timeout to avoid premature HTTP timeouts
+        async with httpx.AsyncClient(timeout=300.0) as client:
             max_retries = 2
             last_error = None
 

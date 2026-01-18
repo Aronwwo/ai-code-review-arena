@@ -17,7 +17,7 @@ import { CodeViewer } from '@/components/CodeViewer';
 import { CodeEditor } from '@/components/CodeEditor';
 import { ReviewConfigDialog, ReviewConfig } from '@/components/ReviewConfigDialog';
 import { getProviders } from '@/lib/providers';
-import { Plus, FileCode, Play, ArrowLeft, Loader2, Upload, Trash2, Edit, Eye, Settings2 } from 'lucide-react';
+import { Plus, FileCode, Play, ArrowLeft, Loader2, Upload, Trash2, Edit, Eye, Settings2, Square, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseApiError } from '@/lib/errorParser';
 
@@ -65,13 +65,24 @@ export function ProjectDetail() {
     enabled: !!id,
   });
 
-  // Combine reviews and arena sessions into one list
+  // Add local review number (1, 2, 3...) based on position in sorted list for each project
   const allReviews = useMemo(() => {
-    const combined = [
-      ...(reviews || []).map(r => ({ ...r, type: 'review' as const })),
-      ...(arenaSessions || []).map(s => ({ ...s, type: 'arena' as const })),
-    ];
-    return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const reviewsList = (reviews || []).map(r => ({ ...r, type: 'review' as const }));
+    const arenaList = (arenaSessions || []).map(s => ({ ...s, type: 'arena' as const }));
+    const combined = [...reviewsList, ...arenaList];
+    const sorted = combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const reviewsOnly = sorted.filter(r => r.type === 'review');
+    const arenaOnly = sorted.filter(r => r.type === 'arena');
+
+    return sorted.map(item => {
+      if (item.type === 'review') {
+        const reviewIndex = reviewsOnly.findIndex(r => r.id === item.id);
+        return { ...item, localNumber: reviewIndex + 1 };
+      }
+      const arenaIndex = arenaOnly.findIndex(a => a.id === item.id);
+      return { ...item, localNumber: arenaIndex + 1 };
+    });
   }, [reviews, arenaSessions]);
 
   // Add file mutation
@@ -109,6 +120,86 @@ export function ProjectDetail() {
     },
   });
 
+  // Resume review mutation
+  const resumeReviewMutation = useMutation({
+    mutationFn: async (reviewId: number) => {
+      const response = await api.post(`/reviews/${reviewId}/resume`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews', id] });
+      queryClient.invalidateQueries({ queryKey: ['review'] });
+      toast.success('Przegląd wznowiony pomyślnie!');
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się wznowić przeglądu'));
+    },
+  });
+
+  // Stop review mutation
+  const stopReviewMutation = useMutation({
+    mutationFn: async (reviewId: number) => {
+      const response = await api.post(`/reviews/${reviewId}/stop`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews', id] });
+      queryClient.invalidateQueries({ queryKey: ['review'] });
+      toast.success('Przegląd zatrzymany pomyślnie!');
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się zatrzymać przeglądu'));
+    },
+  });
+
+  // Delete review mutation
+  const deleteReviewMutation = useMutation({
+    mutationFn: async (reviewId: number) => {
+      await api.delete(`/reviews/${reviewId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews', id] });
+      toast.success('Przegląd usunięty pomyślnie!');
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się usunąć przeglądu'));
+    },
+  });
+
+  const handleResumeReview = (reviewId: number) => {
+    resumeReviewMutation.mutate(reviewId);
+  };
+
+  const handleStopReview = (reviewId: number) => {
+    if (confirm('Czy na pewno chcesz zatrzymać ten przegląd?')) {
+      stopReviewMutation.mutate(reviewId);
+    }
+  };
+
+  const handleDeleteReview = (reviewId: number) => {
+    deleteReviewMutation.mutate(reviewId);
+  };
+
+  // Recreate review mutation - create new review with same configuration
+  const recreateReviewMutation = useMutation({
+    mutationFn: async (reviewId: number) => {
+      const response = await api.post(`/reviews/${reviewId}/recreate`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['reviews', id] });
+      toast.success('Nowy przegląd uruchomiony z tą samą konfiguracją!');
+      navigate(`/reviews/${data.id}`);
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError(error, 'Nie udało się ponownie uruchomić przeglądu'));
+    },
+  });
+
+  const handleRecreateReview = (reviewId: number) => {
+    recreateReviewMutation.mutate(reviewId);
+  };
+
   // Start arena session mutation (arena mode)
   const startArenaMutation = useMutation({
     mutationFn: async (data: ArenaSessionCreate) => {
@@ -124,6 +215,7 @@ export function ProjectDetail() {
       toast.error(parseApiError(error, 'Nie udało się uruchomić sesji Arena'));
     },
   });
+
 
   // Update file mutation
   const updateFileMutation = useMutation({
@@ -226,8 +318,10 @@ export function ProjectDetail() {
       const provider = providers.find(p => p.id === providerId);
       if (!provider) return undefined;
 
-      // Only include custom_provider for non-built-in or custom providers
-      if ((providerId.startsWith('custom-') || !provider.isBuiltIn) && provider.baseUrl) {
+      const openAiCompatibleBuiltIns = new Set(['perplexity', 'deepseek']);
+
+      // Include custom_provider for custom or OpenAI-compatible built-ins
+      if ((providerId.startsWith('custom-') || !provider.isBuiltIn || openAiCompatibleBuiltIns.has(providerId)) && provider.baseUrl) {
         return {
           id: provider.id,
           name: provider.name,
@@ -240,72 +334,45 @@ export function ProjectDetail() {
       return undefined;
     };
 
-    // Helper to build team config for Arena
-    const buildTeamConfig = (team: typeof config.teamA): ArenaTeamConfig => {
-      if (!team) throw new Error('Team config is required');
-      const result: Record<string, AgentConfig> = {};
-      for (const [role, agent] of Object.entries(team)) {
+    if (config.mode === 'arena') {
+      const buildArenaTeam = (agent: any): ArenaTeamConfig => {
         const customProvider = getCustomProviderConfig(agent.provider);
-        result[role] = {
+        const baseConfig: AgentConfig = {
           provider: agent.provider,
           model: agent.model,
           temperature: 0.2,
           max_tokens: agent.max_tokens || 4096,
+          timeout_seconds: (agent.timeout_seconds || agent.timeout || 300),
           custom_provider: customProvider,
         };
-      }
-      return result as unknown as ArenaTeamConfig;
-    };
-
-    if (config.mode === 'arena') {
-      // Arena mode - send to /arena/sessions with two teams
-      if (!config.teamA || !config.teamB) {
-        toast.error('Konfiguracja zespołów jest wymagana');
-        return;
-      }
+        // Arena only uses the 'general' role (single agent per side)
+        return {
+          general: baseConfig,
+        };
+      };
 
       startArenaMutation.mutate({
         project_id: Number(id),
-        team_a_config: buildTeamConfig(config.teamA),
-        team_b_config: buildTeamConfig(config.teamB),
+        team_a_config: buildArenaTeam(config.arenaA),
+        team_b_config: buildArenaTeam(config.arenaB),
         api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
       });
     } else {
-      // Council mode - send to /projects/{id}/reviews
       const agentConfigs: Record<string, AgentConfig> = {};
-      const enabledRoles: string[] = [];
-
-      for (const [role, agent] of Object.entries(config.agents)) {
-        if (agent.enabled) {
-          enabledRoles.push(role);
-          const customProvider = getCustomProviderConfig(agent.provider);
-          agentConfigs[role] = {
-            provider: agent.provider,
-            model: agent.model,
-            temperature: 0.2,
-            max_tokens: agent.max_tokens || 4096,
-            timeout_seconds: agent.timeout || 180,
-            custom_provider: customProvider,
-          };
-        }
-      }
-
-      // Add moderator config
-      const moderatorCustomProvider = getCustomProviderConfig(config.moderator.provider);
-      const moderatorConfig = {
-        provider: config.moderator.provider,
-        model: config.moderator.model,
-        temperature: 0.0,
-        max_tokens: config.moderator.max_tokens || 4096,
-        timeout_seconds: config.moderator.timeout || 300,
-        custom_provider: moderatorCustomProvider,
+      const customProvider = getCustomProviderConfig(config.agent.provider);
+      agentConfigs.general = {
+        provider: config.agent.provider,
+        model: config.agent.model,
+        temperature: 0.2,
+        max_tokens: config.agent.max_tokens || 4096,
+        timeout_seconds: config.agent.timeout || 300,
+        custom_provider: customProvider,
       };
 
       startReviewMutation.mutate({
         review_mode: 'council',
-        agent_roles: enabledRoles,
+        agent_roles: ['general'],
         agent_configs: agentConfigs,
-        moderator_config: moderatorConfig,
         api_keys: Object.keys(apiKeys).length > 0 ? apiKeys : undefined,
       });
     }
@@ -370,7 +437,7 @@ export function ProjectDetail() {
             </Button>
             <Button
               onClick={() => setIsReviewConfigOpen(true)}
-              disabled={startReviewMutation.isPending || startArenaMutation.isPending || (project.files?.length || 0) === 0}
+              disabled={(startReviewMutation.isPending || startArenaMutation.isPending) || (project.files?.length || 0) === 0}
             >
               {(startReviewMutation.isPending || startArenaMutation.isPending) ? (
                 <>
@@ -663,77 +730,166 @@ export function ProjectDetail() {
           {allReviews && allReviews.length > 0 ? (
             <div className="space-y-4">
               {allReviews.map((item) => (
-                <Link key={item.id} to={item.type === 'review' ? `/reviews/${item.id}` : `/arena/${item.id}`}>
-                  <Card className={`hover:shadow-lg transition-shadow cursor-pointer ${item.type === 'arena' ? 'border-l-4 border-l-red-500' : ''}`}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle>
-                          {item.type === 'review' ? `Przegląd #${item.id}` : `Arena #${item.id}`}
+                <Card key={item.id} className={`hover:shadow-lg transition-shadow ${item.type === 'arena' ? 'border-l-4 border-l-red-500' : ''}`}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <Link to={item.type === 'review' ? `/reviews/${item.id}` : `/arena/${item.id}`} className="flex-1">
+                        <CardTitle className="hover:underline">
+                          {item.type === 'review' ? `Przegląd #${item.localNumber}` : `Arena #${item.localNumber}`}
                         </CardTitle>
-                        <div className="flex items-center gap-2">
-                          {item.type === 'review' ? (
-                            <Badge
-                              variant={
-                                item.status === 'completed'
-                                  ? 'success'
-                                  : item.status === 'failed'
-                                  ? 'destructive'
-                                  : item.status === 'running'
-                                  ? 'warning'
-                                  : 'default'
-                              }
-                            >
-                              {item.status === 'running' && (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              )}
-                              {item.status}
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant={
-                                item.status === 'completed'
-                                  ? 'success'
-                                  : item.status === 'failed'
-                                  ? 'destructive'
-                                  : item.status === 'voting'
-                                  ? 'warning'
-                                  : item.status === 'running'
-                                  ? 'warning'
-                                  : 'default'
-                              }
-                            >
-                              {item.status === 'running' && (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              )}
-                              {item.status}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className="text-xs">
-                            {item.type === 'review' ? 'Rada' : 'Arena'}
+                      </Link>
+                      <div className="flex items-center gap-2">
+                        {item.type === 'review' ? (
+                          <Badge
+                            variant={
+                              item.status === 'completed'
+                                ? 'success'
+                                : item.status === 'failed'
+                                ? 'destructive'
+                                : item.status === 'running'
+                                ? 'warning'
+                                : 'default'
+                            }
+                          >
+                            {item.status === 'running' && (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            )}
+                            {item.status}
                           </Badge>
-                        </div>
+                        ) : (
+                          <Badge
+                            variant={
+                              item.status === 'completed'
+                                ? 'success'
+                                : item.status === 'failed'
+                                ? 'destructive'
+                                : item.status === 'voting'
+                                ? 'warning'
+                                : item.status === 'running'
+                                ? 'warning'
+                                : 'default'
+                            }
+                          >
+                            {item.status === 'running' && (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            )}
+                            {item.status}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-xs">
+                          {item.type === 'review' ? 'Rada' : 'Arena'}
+                        </Badge>
+                        {/* Management buttons - only for reviews */}
+                        {item.type === 'review' && (
+                          <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                          {(item.status === 'failed' || item.status === 'pending') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleResumeReview(item.id);
+                              }}
+                              disabled={resumeReviewMutation.isPending}
+                              title="Wznów przegląd"
+                            >
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          )}
+                          {(item.status === 'running' || item.status === 'pending') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleStopReview(item.id);
+                              }}
+                              disabled={stopReviewMutation.isPending}
+                              title="Zatrzymaj przegląd"
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Square className="h-3 w-3" />
+                            </Button>
+                          )}
+                          {/* Recreate review button - show for completed/failed reviews */}
+                          {(item.status === 'completed' || item.status === 'failed') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleRecreateReview(item.id);
+                              }}
+                              disabled={recreateReviewMutation.isPending}
+                              title="Uruchom nowy przegląd z tą samą konfiguracją"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <RotateCw className="h-3 w-3" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (confirm(`Czy na pewno chcesz usunąć przegląd #${item.localNumber}?`)) {
+                                handleDeleteReview(item.id);
+                              }
+                            }}
+                            disabled={deleteReviewMutation.isPending || item.status === 'running'}
+                            title="Usuń przegląd"
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                          </div>
+                        )}
                       </div>
+                    </div>
+                    <Link to={item.type === 'review' ? `/reviews/${item.id}` : `/arena/${item.id}`}>
                       <CardDescription>
                         {item.type === 'review' ? (
                           <>
                             {item.agent_count} agentów • {item.issue_count} problemów
+                            {item.models && item.models.length > 0 && (
+                              <>
+                                <br />
+                                <span className="text-xs text-muted-foreground">
+                                  Modele: {item.models.join(', ')}
+                                </span>
+                              </>
+                            )}
                           </>
                         ) : (
                           <>
-                            Zespół A: {item.team_a_issues?.length || 0} problemów
+                            Model A: {item.team_a_issues?.length || 0} problemów
                             {item.winner && item.status === 'completed' && item.winner === 'A' && ' (Zwycięzca)'}
                             <br />
-                            Zespół B: {item.team_b_issues?.length || 0} problemów
+                            Model B: {item.team_b_issues?.length || 0} problemów
                             {item.winner && item.status === 'completed' && item.winner === 'B' && ' (Zwycięzca)'}
                             {item.winner && item.status === 'completed' && item.winner === 'tie' && ' (Remis)'}
+                            {(item.team_a_config || item.team_b_config) && (
+                              <>
+                                <br />
+                                <span className="text-xs text-muted-foreground">
+                                  Model A: {item.team_a_config?.general ? `${item.team_a_config.general.provider}/${item.team_a_config.general.model}` : '—'}
+                                  {' • '}
+                                  Model B: {item.team_b_config?.general ? `${item.team_b_config.general.provider}/${item.team_b_config.general.model}` : '—'}
+                                </span>
+                              </>
+                            )}
                           </>
                         )}
                         <br />
                         Data utworzenia: {new Date(item.created_at).toLocaleString()}
                       </CardDescription>
-                    </CardHeader>
-                  </Card>
-                </Link>
+                    </Link>
+                  </CardHeader>
+                </Card>
               ))}
             </div>
           ) : (

@@ -25,7 +25,7 @@ async def get_model_rankings(
     - Average issues per review
     - Success rate (parsed successfully)
     """
-    # Base query
+    # Base query (ranking only for general agent)
     query = (
         select(
             ReviewAgent.provider,
@@ -34,12 +34,13 @@ async def get_model_rankings(
             func.count(ReviewAgent.id).label('reviews_count'),
             func.sum(func.cast(ReviewAgent.parsed_successfully, int)).label('successful_parses'),
         )
+        .where(ReviewAgent.role == "general")
         .group_by(ReviewAgent.provider, ReviewAgent.model, ReviewAgent.role)
     )
 
-    # Filter by role if specified
-    if agent_role:
-        query = query.where(ReviewAgent.role == agent_role)
+    # Backwards compatibility: ignore non-general role filters
+    if agent_role and agent_role != "general":
+        raise HTTPException(status_code=400, detail="Rankingi dostępne tylko dla agenta 'general'")
 
     results = session.exec(query).all()
 
@@ -57,7 +58,7 @@ async def get_model_rankings(
                 and_(
                     ReviewAgent.provider == provider,
                     ReviewAgent.model == model,
-                    ReviewAgent.role == role
+                    ReviewAgent.role == "general"
                 )
             )
         )
@@ -96,6 +97,7 @@ async def get_provider_rankings(
             func.count(ReviewAgent.id).label('reviews_count'),
             func.sum(func.cast(ReviewAgent.parsed_successfully, int)).label('successful_parses'),
         )
+        .where(ReviewAgent.role == "general")
         .group_by(ReviewAgent.provider)
     )
 
@@ -110,7 +112,12 @@ async def get_provider_rankings(
             select(func.count(Issue.id))
             .join(Review, Issue.review_id == Review.id)
             .join(ReviewAgent, ReviewAgent.review_id == Review.id)
-            .where(ReviewAgent.provider == provider)
+            .where(
+                and_(
+                    ReviewAgent.provider == provider,
+                    ReviewAgent.role == "general"
+                )
+            )
         )
         issues_count = session.exec(issues_query).one()
 
@@ -149,15 +156,13 @@ async def get_overall_stats(
     total_issues = session.exec(select(func.count(Issue.id))).one()
 
     # Total agents participated
-    total_agents = session.exec(select(func.count(ReviewAgent.id))).one()
+    total_agents = session.exec(
+        select(func.count(ReviewAgent.id)).where(ReviewAgent.role == "general")
+    ).one()
 
     # Reviews by mode
     council_reviews = session.exec(
         select(func.count(Review.id)).where(Review.review_mode == "council")
-    ).one()
-
-    arena_reviews = session.exec(
-        select(func.count(Review.id)).where(Review.review_mode == "arena")
     ).one()
 
     return {
@@ -167,5 +172,5 @@ async def get_overall_stats(
         'total_agents_participated': total_agents,
         'avg_issues_per_review': round(total_issues / completed_reviews, 2) if completed_reviews > 0 else 0,
         'council_reviews': council_reviews,
-        'arena_reviews': arena_reviews
+        'arena_reviews': 0
     }

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
-import { Code2, Users, MessageSquare, Shield, Zap, Target } from 'lucide-react';
+import { Code2, Users, MessageSquare, Shield } from 'lucide-react';
 
 export function Home() {
   const { isAuthenticated } = useAuth();
@@ -15,8 +15,8 @@ export function Home() {
           AI Code Review Arena
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Wieloagentowy przegląd kodu z trybem Rady i Areny. Agenci analizują kod z różnych
-          perspektyw, a moderator podsumowuje najważniejsze wnioski.
+          Jednoagentowy przegląd kodu z czytelnym raportem. Agent skupia się na
+          rzeczywistych błędach, które blokują uruchomienie lub powodują crash.
         </p>
         <div className="flex justify-center gap-4 mt-8">
           {isAuthenticated ? (
@@ -45,9 +45,9 @@ export function Home() {
         <Card>
           <CardHeader>
             <Users className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Wieloagentowa analiza</CardTitle>
+            <CardTitle>Skupiona analiza</CardTitle>
             <CardDescription>
-              Cztery role: ogólny, bezpieczeństwo, wydajność i styl. Każda ma własny model.
+              Jeden agent analizuje poprawność kodu i raportuje realne błędy.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -55,41 +55,9 @@ export function Home() {
         <Card>
           <CardHeader>
             <MessageSquare className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Tryb Rady</CardTitle>
+            <CardTitle>Jasny raport</CardTitle>
             <CardDescription>
-              Jeden zespół agentów dochodzi do wspólnego wniosku i raportu.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <Target className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Tryb Areny</CardTitle>
-            <CardDescription>
-              Dwa zespoły analizują kod, a Ty wybierasz lepszy wynik. Głosy budują ranking.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <Shield className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Bezpieczeństwo przede wszystkim</CardTitle>
-            <CardDescription>
-              Dedykowany agent bezpieczeństwa identyfikuje podatności, ryzyko wstrzyknięć
-              i niebezpieczne wzorce w kodzie.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <Zap className="h-10 w-10 text-primary mb-2" />
-            <CardTitle>Optymalizacja wydajności</CardTitle>
-            <CardDescription>
-              Agent wydajności wykrywa nieefektywności algorytmiczne, zapytania N+1
-              i możliwości optymalizacji.
+              Zwięzłe podsumowanie i lista problemów z kontekstem.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -103,12 +71,22 @@ export function Home() {
             </CardDescription>
           </CardHeader>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <Shield className="h-10 w-10 text-primary mb-2" />
+            <CardTitle>Bezpieczny przepływ</CardTitle>
+            <CardDescription>
+              Uwierzytelnianie z cookies, CSRF i rate‑limit. Kod pozostaje lokalnie.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
 
       {/* How it Works */}
       <div className="space-y-6">
         <h2 className="text-3xl font-bold text-center">Jak to działa</h2>
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center space-y-2">
@@ -129,9 +107,9 @@ export function Home() {
                 <div className="bg-primary text-primary-foreground rounded-full w-12 h-12 flex items-center justify-center mx-auto font-bold text-lg">
                   2
                 </div>
-                <h3 className="font-semibold">Wybierz tryb</h3>
+                <h3 className="font-semibold">Uruchom analizę</h3>
                 <p className="text-sm text-muted-foreground">
-                  Rada dla konsensusu lub Arena dla porównania
+                  Wybierz providera i model
                 </p>
               </div>
             </CardContent>
@@ -151,19 +129,6 @@ export function Home() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center space-y-2">
-                <div className="bg-primary text-primary-foreground rounded-full w-12 h-12 flex items-center justify-center mx-auto font-bold text-lg">
-                  4
-                </div>
-                <h3 className="font-semibold">Głębsza analiza</h3>
-                <p className="text-sm text-muted-foreground">
-                  Debaty i dyskusje agentów dla wybranych problemów
-                </p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

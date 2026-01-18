@@ -31,6 +31,8 @@ class IssueSchema(BaseModel):
     file_name: str | None = None
     line_start: int | None = None
     line_end: int | None = None
+    suggested_code: str | None = None  # Sugestia naprawy kodu
+    explanation: str | None = None  # Dodatkowe wyjaśnienie problemu
 
 
 class TeamResultSchema(BaseModel):
@@ -42,42 +44,18 @@ class TeamResultSchema(BaseModel):
 class ArenaOrchestrator:
     """Orkiestrator sesji Arena."""
 
-    # Prompty dla agentów (te same co w review)
+    # Prompt dla pojedynczego agenta (General)
     AGENT_PROMPTS = {
-        "general": """Jesteś ekspertem ds. przeglądów kodu. Analizuj kod pod kątem:
-- Błędów logicznych i bugów
-- Czytelności i maintainability
-- Obsługi błędów
-- Struktury kodu
+        "general": """Jesteś Ekspertem Poprawności Kodu (Code Correctness Specialist). Twoją JEDYNĄ odpowiedzialnością jest znajdowanie błędów składniowych, logicznych i bugów.
 
-Odpowiadaj krótko i konkretnie po polsku.""",
-
-        "security": """Jesteś ekspertem ds. bezpieczeństwa. Szukaj:
-- Luk injection (SQL, XSS, command)
-- Błędów uwierzytelniania/autoryzacji
-- Wycieku danych wrażliwych
-- Niebezpiecznych konfiguracji
-
-Odpowiadaj krótko i konkretnie po polsku.""",
-
-        "performance": """Jesteś ekspertem ds. wydajności. Szukaj:
-- Nieefektywnych algorytmów
-- Problemów N+1
-- Wycieków pamięci
-- Blokujących operacji
-
-Odpowiadaj krótko i konkretnie po polsku.""",
-
-        "style": """Jesteś ekspertem ds. stylu kodu. Sprawdzaj:
-- Konwencje nazewnictwa
-- Formatowanie
-- Dokumentację
-- Code smells
+KRYTYCZNE ZASADY:
+- Skupiaj się WYŁĄCZNIE na: błędach składniowych (brakujące znaki, niepoprawna składnia), błędach logicznych (błędna logika, nieprawidłowe obliczenia), bugach (wyjątki, crashy, przypadki brzegowe)
+- IGNORUJ: bezpieczeństwo, wydajność, styl
 
 Odpowiadaj krótko i konkretnie po polsku."""
     }
 
-    SUMMARY_PROMPT = """Jesteś moderatorem przeglądu kodu. Twoim zadaniem jest STWORZYĆ ZWIĘZŁE PODSUMOWANIE na podstawie RZECZYWISTYCH analiz od 4 agentów-ekspertów.
+    SUMMARY_PROMPT = """Jesteś moderatorem przeglądu kodu. Twoim zadaniem jest STWORZYĆ ZWIĘZŁE PODSUMOWANIE na podstawie RZECZYWISTYCH analiz od 1 agenta-eksperta.
 
 KRYTYCZNE ZASADY:
 - TYLKO syntetyzuj i podsumuj odpowiedzi od agentów - NIE analizuj kodu samodzielnie
@@ -177,10 +155,10 @@ Odpowiadaj po polsku, zwięźle i konkretnie. Używaj TYLKO informacji z analiz 
         api_keys: dict | None,
         team_name: str
     ) -> TeamResultSchema:
-        """Uruchom zespół agentów i zbierz wyniki.
+        """Uruchom zespół agenta i zbierz wyniki.
 
         Args:
-            team_config: Konfiguracja zespołu (4 role)
+            team_config: Konfiguracja zespołu (tylko general)
             code_context: Kod do analizy
             api_keys: Klucze API
             team_name: Nazwa zespołu (A lub B)
@@ -191,8 +169,8 @@ Odpowiadaj po polsku, zwięźle i konkretnie. Używaj TYLKO informacji z analiz 
         all_issues = []
         agent_analyses = {}
 
-        # Uruchom każdego agenta
-        for role in ["general", "security", "performance", "style"]:
+        # Uruchom tylko agenta general
+        for role in ["general"]:
             config = team_config.get(role, {})
             provider = config.get("provider", "ollama")
             model = config.get("model", "qwen2.5-coder:latest")
@@ -213,10 +191,12 @@ Odpowiedz w formacie JSON:
       "severity": "info|warning|error",
       "category": "kategoria problemu",
       "title": "krótki tytuł",
-      "description": "opis problemu",
+      "description": "szczegółowy opis problemu",
       "file_name": "nazwa pliku lub null",
       "line_start": numer linii lub null,
-      "line_end": numer linii lub null
+      "line_end": numer linii lub null,
+      "suggested_code": "poprawiony kod lub null",
+      "explanation": "dodatkowe wyjaśnienie dlaczego to problem i jak naprawić"
     }}
   ],
   "analysis": "Twoja ogólna analiza kodu (1-2 zdania)"
@@ -230,6 +210,19 @@ Odpowiedz w formacie JSON:
             # Pobierz klucz API
             api_key = api_keys.get(provider) if api_keys else None
 
+            # Build custom_provider_config for Perplexity and other custom providers
+            custom_provider_config = None
+            if provider and provider.lower() == "perplexity":
+                # Build custom provider config for Perplexity
+                custom_provider_config = CustomProviderConfig(
+                    id="perplexity",
+                    name="Perplexity",
+                    base_url="https://api.perplexity.ai",
+                    api_key=api_key,
+                    header_name="Authorization",
+                    header_prefix="Bearer ",
+                )
+
             try:
                 # Wywołaj LLM
                 response, _, _ = await provider_router.generate(
@@ -238,7 +231,8 @@ Odpowiedz w formacie JSON:
                     model=model,
                     temperature=0.2,
                     max_tokens=4096,
-                    api_key=api_key
+                    api_key=api_key,
+                    custom_provider_config=custom_provider_config
                 )
 
                 # Parsuj odpowiedź
@@ -313,6 +307,58 @@ Odpowiedz w formacie JSON:
 
         return issues, analysis or f"Analiza {role}: {len(issues)} problemów"
 
+    def _cleanup_summary(self, response: str) -> str:
+        """Wyczyść podsumowanie z JSON i sformatuj czytelnie.
+
+        Args:
+            response: Surowa odpowiedź LLM
+
+        Returns:
+            str: Czytelne podsumowanie
+        """
+        import json
+        import re
+
+        # Sprawdź czy response to JSON
+        try:
+            # Spróbuj znaleźć JSON w odpowiedzi
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                json_str = json_match.group()
+                data = json.loads(json_str)
+
+                # Jeśli to JSON, sformatuj czytelnie
+                lines = []
+
+                # Podsumowanie
+                if "summary" in data:
+                    lines.append(data["summary"])
+
+                # Issues
+                if "issues" in data and data["issues"]:
+                    lines.append(f"\n{len(data['issues'])} problemów:")
+                    for i, issue in enumerate(data["issues"][:5], 1):  # Max 5
+                        title = issue.get("title", "Problem")
+                        lines.append(f"{i}. {title}")
+
+                # Ogólna ocena
+                if "summary" in data or "issues" in data:
+                    if data.get("issues"):
+                        lines.append(f"\nOgólna ocena: {10 - min(len(data['issues']), 7)}/10")
+                    else:
+                        lines.append("\nOgólna ocena: 10/10")
+
+                # Rekomendacja
+                if "summary" in data and data["summary"]:
+                    lines.append(f"\nRekomendacja: {data['summary']}")
+
+                return "\n".join(lines) if lines else response
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+        # Jeśli nie JSON lub parsing failed, zwróć oryginalny response
+        return response
+
     async def _generate_summary(
         self,
         agent_analyses: dict[str, str],
@@ -349,26 +395,42 @@ Odpowiedz w formacie JSON:
 
         api_key = api_keys.get(provider) if api_keys else None
 
+        # Build custom_provider_config for Perplexity
+        custom_provider_config = None
+        if provider and provider.lower() == "perplexity":
+            custom_provider_config = CustomProviderConfig(
+                id="perplexity",
+                name="Perplexity",
+                base_url="https://api.perplexity.ai",
+                api_key=api_key,
+                header_name="Authorization",
+                header_prefix="Bearer ",
+            )
+
         try:
             logger.info(f"🔄 Generowanie podsumowania dla zespołu z {len(agent_analyses)} analizami od agentów...")
             logger.debug(f"📝 Rzeczywiste analizy od agentów:\n{analyses_text[:1000]}...")
-            
+
             response, _, _ = await provider_router.generate(
                 messages=messages,
                 provider_name=provider,
                 model=model,
                 temperature=0.3,
                 max_tokens=1024,
-                api_key=api_key
+                api_key=api_key,
+                custom_provider_config=custom_provider_config
             )
             
             logger.info(f"✅ Wygenerowano podsumowanie ({len(response)} chars): {response[:200]}...")
-            
+
             # Validate that summary is not a placeholder or generated without agent data
             if not response or len(response.strip()) < 20:
                 logger.warning("Summary too short or empty - using fallback")
                 return "Podsumowanie niedostępne - agenci nie dostarczyli wystarczających danych."
-            
+
+            # Clean up response - remove JSON if present and convert to readable text
+            response = self._cleanup_summary(response)
+
             return response
         except Exception as e:
             logger.warning(f"Summary generation failed: {e}", exc_info=True)

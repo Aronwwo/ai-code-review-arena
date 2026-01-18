@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Review, IssueWithSuggestions, ReviewAgent, FileWithContent } from '@/types';
 import { Button } from '@/components/ui/Button';
@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { CodeViewer } from '@/components/CodeViewer';
 import { ConversationView } from '@/components/ConversationView';
 import { useReviewWebSocket } from '@/hooks/useReviewWebSocket';
-import { ArrowLeft, AlertCircle, AlertTriangle, Info, FileCode, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Loader2, CheckCircle2, XCircle, Radio, Clock, Bot } from 'lucide-react';
+import { ArrowLeft, AlertCircle, AlertTriangle, Info, FileCode, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Loader2, CheckCircle2, XCircle, Radio, Clock, Bot, Play, Square, Trash2, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseApiError } from '@/lib/errorParser';
 
 interface ProjectWithFiles {
   id: number;
@@ -31,7 +32,7 @@ interface PaginatedResponse<T> {
 
 interface ConversationSummary {
   id: number;
-  mode: 'council' | 'arena';
+  mode: 'council';
   status: 'pending' | 'running' | 'completed' | 'failed';
   summary?: string | null;
   created_at: string;
@@ -40,6 +41,7 @@ interface ConversationSummary {
 export function ReviewDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
@@ -213,12 +215,6 @@ export function ReviewDetail() {
     });
   };
 
-  const startArenaDebate = (event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent card toggle
-    setActiveTab('discussions');
-    toast.info('Otwarto zakładkę dyskusji AI.');
-  };
-
   const getCodeSnippet = (fileName: string | null, lineStart: number | null, lineEnd: number | null) => {
     if (!fileName || !project?.files) return null;
 
@@ -259,6 +255,79 @@ export function ReviewDetail() {
     }
   };
 
+  // Resume review mutation
+  const resumeReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Review ID is missing');
+      const response = await api.post(`/reviews/${id}/resume`);
+      return response.data;
+    },
+    onSuccess: () => {
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: ['review', id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast.success('Przegląd wznowiony pomyślnie!');
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError ? parseApiError(error, 'Nie udało się wznowić przeglądu') : 'Nie udało się wznowić przeglądu');
+    },
+  });
+
+  // Stop review mutation
+  const stopReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Review ID is missing');
+      const response = await api.post(`/reviews/${id}/stop`);
+      return response.data;
+    },
+    onSuccess: () => {
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: ['review', id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast.success('Przegląd zatrzymany pomyślnie!');
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError ? parseApiError(error, 'Nie udało się zatrzymać przeglądu') : 'Nie udało się zatrzymać przeglądu');
+    },
+  });
+
+  // Delete review mutation
+  const deleteReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Review ID is missing');
+      await api.delete(`/reviews/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      toast.success('Przegląd usunięty pomyślnie!');
+      navigate(-1); // Go back to previous page
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError ? parseApiError(error, 'Nie udało się usunąć przeglądu') : 'Nie udało się usunąć przeglądu');
+    },
+  });
+
+  // Recreate review mutation - create new review with same configuration
+  const recreateReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Review ID is missing');
+      const response = await api.post(`/reviews/${id}/recreate`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['reviews', review?.project_id] });
+      toast.success('Nowy przegląd uruchomiony z tą samą konfiguracją!');
+      // Navigate to new review
+      navigate(`/reviews/${data.id}`);
+    },
+    onError: (error: unknown) => {
+      toast.error(parseApiError ? parseApiError(error, 'Nie udało się ponownie uruchomić przeglądu') : 'Nie udało się ponownie uruchomić przeglądu');
+    },
+  });
+
   if (reviewLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -293,8 +362,8 @@ export function ReviewDetail() {
       'rzeczywisty tytuł problemu',  // Full phrase from prompt
       'rzeczywiste podsumowanie przeglądu kodu',  // Full phrase from prompt
       'szczegółowy opis znalezionego problemu po polsku',  // Full phrase from prompt
-      'code_snippet': "fragment kodu',  // Placeholder in JSON
-      'suggested_fix': "sugestia naprawy',  // Placeholder in JSON
+      "'code_snippet': \"fragment kodu\"",  // Placeholder in JSON
+      "'suggested_fix': \"sugestia naprawy\"",  // Placeholder in JSON
     ];
     
     for (const pattern of strongPatterns) {
@@ -338,65 +407,7 @@ export function ReviewDetail() {
     return false;
   };
 
-  // Raport moderatora z review.summary (nowy flow)
-  const moderatorSummaryText = review?.summary || null;
-  const parseModeratorSummary = (raw: string | null) => {
-    if (!raw) return { text: null, summary: null, overallQuality: null, issues: null };
-    
-    // Check if it's an error message
-    if (raw.trim().startsWith('[BŁĄD]') || raw.trim().startsWith('[ERROR]')) {
-      return { text: raw, summary: null, overallQuality: null, issues: null };
-    }
-    
-    // Check for placeholders in raw text
-    if (containsPlaceholders(raw)) {
-      return { text: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
-    }
-    
-    const cleaned = raw
-      .trim()
-      .replace(/^```json\s*/i, '')
-      .replace(/^```/i, '')
-      .replace(/```$/i, '')
-      .replace(/^json\s*/i, '');
-
-    try {
-      const data = JSON.parse(cleaned);
-      
-      // Check parsed data for placeholders
-      const summary = typeof data.summary === 'string' ? data.summary : null;
-      if (summary && containsPlaceholders(summary)) {
-        return { text: '[BŁĄD] Podsumowanie zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
-      }
-      
-      const overallQuality = typeof data.overall_quality === 'string' ? data.overall_quality : null;
-      const issues = Array.isArray(data.issues) 
-        ? data.issues.filter((issue: any) => {
-            const title = issue.title || '';
-            const desc = issue.description || '';
-            return !containsPlaceholders(title) && !containsPlaceholders(desc);
-          })
-        : null;
-      
-      if (summary || overallQuality || issues) {
-        return { text: null, summary, overallQuality, issues };
-      }
-    } catch {
-      // Fallback - check if it looks like JSON with placeholders
-      if (cleaned.includes('PO POLSKU') || cleaned.includes('po polsku') || 
-          cleaned.includes('"info" | "warning"') || cleaned.includes('| "warning" | "error"')) {
-        return { text: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
-      }
-    }
-
-    // Don't return raw JSON if it looks like a template
-    if (cleaned.includes('"info" | "warning"') || cleaned.includes('| "warning" | "error"')) {
-      return { text: '[BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy', summary: null, overallQuality: null, issues: null };
-    }
-
-    return { text: null, summary: null, overallQuality: null, issues: null };
-  };
-  const moderatorParsed = parseModeratorSummary(moderatorSummaryText);
+  // No moderator - agents store issues directly in database
 
   // Helper to parse agent raw_output
   const parseAgentResponse = (rawOutput: string | null) => {
@@ -428,8 +439,23 @@ export function ReviewDetail() {
     }
     
     try {
-      // Try to parse as JSON
-      const data = JSON.parse(cleanedOutput);
+      // Try to parse as JSON first
+      let data;
+      try {
+        data = JSON.parse(cleanedOutput);
+      } catch (jsonError) {
+        // Try to extract JSON from text (look for JSON block)
+        const jsonMatch = cleanedOutput.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            data = JSON.parse(jsonMatch[0]);
+          } catch {
+            throw jsonError; // Re-throw original error
+          }
+        } else {
+          throw jsonError; // Re-throw original error
+        }
+      }
       
       // Validate structure
       if (!data || typeof data !== 'object') {
@@ -439,7 +465,9 @@ export function ReviewDetail() {
       // Extract summary
       const summary = typeof data.summary === 'string' && data.summary.trim() 
         ? data.summary.trim() 
-        : 'Brak podsumowania';
+        : (typeof data.analysis === 'string' && data.analysis.trim() 
+            ? data.analysis.trim() 
+            : 'Brak podsumowania');
       
       // Check summary for placeholders (only strong matches)
       if (summary.includes('"info" | "warning"') || 
@@ -486,10 +514,22 @@ export function ReviewDetail() {
     } catch (e) {
       console.error("Failed to parse agent JSON response:", e);
       
-      // Fallback: check if it's just a plain text response
-      if (cleanedOutput.length > 50 && !cleanedOutput.includes('{') && !cleanedOutput.includes('[')) {
-        // Plain text response - not JSON
-        return { summary: cleanedOutput, issues: [] };
+      // Fallback: try to extract useful text even if not JSON
+      // Remove any JSON-looking structures and return the text
+      let textOnly = cleanedOutput;
+      
+      // Remove JSON objects/arrays if present but malformed
+      textOnly = textOnly.replace(/\{[^}]*\}/g, ' ').replace(/\[[^\]]*\]/g, ' ').trim();
+      
+      // If we have meaningful text (not just JSON fragments), use it
+      if (textOnly.length > 20 && !textOnly.match(/^[\{\}\[\]",\s:]+$/)) {
+        // Has meaningful content - return as summary
+        return { summary: textOnly.substring(0, 1000), issues: [] };
+      }
+      
+      // If original has meaningful content, use it (even if JSON-like)
+      if (cleanedOutput.length > 50) {
+        return { summary: cleanedOutput.substring(0, 1000), issues: [] };
       }
       
       // Last resort: return error message
@@ -526,6 +566,69 @@ export function ReviewDetail() {
           <Badge variant={review.status === 'completed' ? 'success' : review.status === 'failed' ? 'destructive' : 'default'} className="text-sm px-3 py-1">
             {review.status}
           </Badge>
+          {/* Management buttons */}
+          <div className="flex items-center gap-2 ml-4">
+            {(review.status === 'failed' || review.status === 'pending') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => resumeReviewMutation.mutate()}
+                disabled={resumeReviewMutation.isPending}
+                title="Wznów przegląd"
+              >
+                <Play className="h-4 w-4 mr-1" />
+                Wznów
+              </Button>
+            )}
+            {(review.status === 'running' || review.status === 'pending') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (confirm('Czy na pewno chcesz zatrzymać ten przegląd?')) {
+                    stopReviewMutation.mutate();
+                  }
+                }}
+                disabled={stopReviewMutation.isPending}
+                title="Zatrzymaj przegląd"
+                className="text-red-600 hover:text-red-700"
+              >
+                <Square className="h-4 w-4 mr-1" />
+                Zatrzymaj
+              </Button>
+            )}
+            {/* Recreate review button - show for completed/failed reviews */}
+            {(review.status === 'completed' || review.status === 'failed') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  recreateReviewMutation.mutate();
+                }}
+                disabled={recreateReviewMutation.isPending}
+                title="Uruchom nowy przegląd z tą samą konfiguracją"
+                className="text-blue-600 hover:text-blue-700"
+              >
+                <RotateCw className="h-4 w-4 mr-1" />
+                Uruchom ponownie
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (confirm(`Czy na pewno chcesz usunąć przegląd #${id}?`)) {
+                  deleteReviewMutation.mutate();
+                }
+              }}
+              disabled={deleteReviewMutation.isPending || review.status === 'running'}
+              title="Usuń przegląd"
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Usuń
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -618,194 +721,12 @@ export function ReviewDetail() {
           <CardContent className="pt-6">
             <div className="text-center">
               <div className="text-3xl font-bold">{agents?.length || 0}</div>
-              <div className="text-sm text-muted-foreground">Agenci</div>
+              <div className="text-sm text-muted-foreground">Agent</div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Moderator Summary - główny raport */}
-      {review.status === 'completed' && moderatorSummaryText && (() => {
-        // Check if this is a "no agent responses" message (not a real moderator report)
-        const isNoAgentResponses = moderatorSummaryText.includes('Nie można przeprowadzić przeglądu kodu') ||
-                                   moderatorSummaryText.includes('brak odpowiedzi od agentów') ||
-                                   moderatorSummaryText.includes('nie można ocenić') && moderatorSummaryText.includes('brak odpowiedzi');
-        
-        // Check if summary contains placeholders or is an error
-        const isError = moderatorSummaryText?.startsWith('[BŁĄD]') || 
-                       moderatorSummaryText?.startsWith('[ERROR]');
-        
-        // If no agent responses, show as warning instead of moderator report
-        if (isNoAgentResponses) {
-          return (
-            <Card className="border-2 border-yellow-500/30 bg-yellow-500/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-yellow-600">
-                  <Bot className="h-5 w-5" />
-                  Uwaga: Brak odpowiedzi od agentów
-                </CardTitle>
-                <CardDescription>
-                  Przegląd nie mógł zostać przeprowadzony, ponieważ żaden z agentów nie zwrócił odpowiedzi.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-                    <p className="text-sm text-yellow-700 dark:text-yellow-300 font-medium">
-                      {moderatorParsed.summary || moderatorSummaryText}
-                    </p>
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>• Sprawdź logi backendu, aby zobaczyć szczegóły błędów</p>
-                    <p>• Sprawdź konfigurację API kluczy dla dostawców (Google Gemini, Groq, etc.)</p>
-                    <p>• Sprawdź, czy limity czasu nie są zbyt krótkie</p>
-                    <p>• Upewnij się, że dostawcy LLM są dostępni i działają poprawnie</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        }
-        
-        // Regular moderator report
-        return (
-        <Card className="border-2 border-primary/30 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-primary" />
-              Raport Moderatora
-            </CardTitle>
-            <CardDescription>
-              Końcowy raport na podstawie analizy wszystkich agentów
-              {timedOutAgents.length > 0 && (
-                <span className="ml-2 text-yellow-600">
-                  ({timedOutAgents.length} agent(ów) przekroczyło limit czasu)
-                </span>
-              )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-              {(() => {
-                if (isError) {
-                  return (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                      <p className="text-sm text-red-600 font-medium">{moderatorSummaryText}</p>
-                    </div>
-                  );
-                }
-              
-              // Check for placeholders in parsed data
-              const hasPlaceholders = moderatorParsed.summary && containsPlaceholders(moderatorParsed.summary);
-              
-              if (hasPlaceholders) {
-                return (
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-                    <p className="text-sm text-yellow-600 font-medium">
-                      [BŁĄD] Odpowiedź zawiera placeholdery zamiast rzeczywistej analizy
-                    </p>
-                  </div>
-                );
-              }
-              
-              // Display parsed content in readable format
-              return (
-                <div className="space-y-4">
-                  {moderatorParsed.summary && (
-                    <div>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {moderatorParsed.summary}
-                    </p>
-                    </div>
-                  )}
-                  
-                  {moderatorParsed.overallQuality && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Ogólna jakość:</span>
-                      <Badge variant="secondary">{moderatorParsed.overallQuality}</Badge>
-                    </div>
-                  )}
-                  
-                  {moderatorParsed.issues && moderatorParsed.issues.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="text-sm font-semibold">
-                      Wykryte problemy: {moderatorParsed.issues.length}
-                    </div>
-                      <div className="space-y-2">
-                        {moderatorParsed.issues.map((issue: any, idx: number) => (
-                          <div key={idx} className="border-l-2 border-border pl-3 py-2 bg-background/50 rounded">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge 
-                                variant={
-                                  issue.severity === 'error' ? 'destructive' :
-                                  issue.severity === 'warning' ? 'warning' : 'default'
-                                }
-                                className="text-xs"
-                              >
-                                {issue.severity}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">{issue.category}</span>
-                            </div>
-                            <p className="text-sm font-medium">{issue.title}</p>
-                            {issue.description && (
-                              <p className="text-xs text-muted-foreground mt-1">{issue.description}</p>
-                            )}
-                            {issue.file_name && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                📄 {issue.file_name}
-                                {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
-                              </p>
-                            )}
-                            {issue.code_snippet && 
-                             issue.code_snippet.trim().length > 10 &&
-                             !issue.code_snippet.toLowerCase().includes('fragment kodu') &&
-                             issue.code_snippet.trim() !== '1' && (
-                              <div className="mt-2">
-                                <CodeViewer
-                                  code={issue.code_snippet}
-                                  language={issue.file_name ? (issue.file_name.split('.').pop() || 'python') : 'python'}
-                                  showLineNumbers={true}
-                                  filename="Fragment kodu"
-                                />
-                              </div>
-                            )}
-                            {issue.suggested_fix && 
-                             issue.suggested_fix.trim().length > 10 &&
-                             !issue.suggested_fix.toLowerCase().includes('sugestia naprawy') &&
-                             issue.suggested_fix.trim() !== '1' && (
-                              <div className="mt-2">
-                                <span className="text-xs font-semibold">💡 Sugestia poprawki: </span>
-                                {issue.suggested_fix.includes('\n') || issue.suggested_fix.length > 100 ? (
-                                  <div className="mt-1">
-                                    <CodeViewer
-                                      code={issue.suggested_fix}
-                                      language={issue.file_name ? (issue.file_name.split('.').pop() || 'python') : 'python'}
-                                      showLineNumbers={true}
-                                      filename="Sugerowany kod"
-                                    />
-                </div>
-              ) : (
-                                  <span className="text-xs">{issue.suggested_fix}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {!moderatorParsed.summary && !moderatorParsed.overallQuality && (!moderatorParsed.issues || moderatorParsed.issues.length === 0) && (
-                    <p className="text-sm text-muted-foreground italic">
-                      {moderatorSummaryText || 'Brak danych'}
-                </p>
-              )}
-            </div>
-              );
-              })()}
-          </CardContent>
-        </Card>
-        );
-      })()}
 
       {/* Agents - rozwijalna sekcja */}
       {agents && agents.length > 0 && (
@@ -818,10 +739,10 @@ export function ReviewDetail() {
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Bot className="h-5 w-5" />
-                  Odpowiedzi agentów ({agents.length})
+                  Odpowiedź agenta ({agents.length})
                 </CardTitle>
                 <CardDescription>
-                  Kliknij, aby zobaczyć szczegółowe odpowiedzi każdego agenta
+                  Kliknij, aby zobaczyć szczegółową odpowiedź agenta
                 </CardDescription>
               </div>
               <Button variant="ghost" size="sm">
@@ -836,7 +757,7 @@ export function ReviewDetail() {
                   className="px-3 py-1 flex items-center gap-1"
                 >
                   {agent.timed_out && <Clock className="h-3 w-3" />}
-                  {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)}
+                  {agent.role === 'general' ? 'Poprawność Kodu' : agent.role}
                   <span className="text-xs opacity-70">({agent.provider}/{agent.model.split('/').pop()})</span>
                 </Badge>
               ))}
@@ -863,7 +784,7 @@ export function ReviewDetail() {
                           <XCircle className="h-4 w-4 text-red-500" />
                         )}
                         <span className="font-medium">
-                          {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)} Agent
+                          {agent.role === 'general' ? 'Poprawność Kodu' : agent.role}
                         </span>
                         <Badge variant="outline" className="text-xs">
                           {agent.provider} / {agent.model}
@@ -879,7 +800,12 @@ export function ReviewDetail() {
                       </Button>
                     </div>
                   </CardHeader>
-                  {expandedAgents.has(agent.id) && (
+                  <div 
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      expandedAgents.has(agent.id) ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'
+                    }`}
+                  >
+                    {expandedAgents.has(agent.id) && (
                     <CardContent className="pt-0">
                       {(() => {
                         // Check if raw_output exists and is not empty
@@ -936,19 +862,41 @@ export function ReviewDetail() {
                         
                         // Try to parse as JSON response
                         const { summary, issues } = parseAgentResponse(rawOutput);
+                        const hasContent = summary && summary !== 'Brak podsumowania' && !summary.includes('Nieprawidłowy format');
+                        
                         return (
                           <div className="bg-muted/50 rounded-lg p-4 max-h-96 overflow-y-auto space-y-3">
-                            {summary && <p className="text-sm font-medium">{summary}</p>}
-                            {issues.length > 0 && (
+                            {hasContent && (
                               <div className="space-y-2">
-                                <h5 className="text-sm font-semibold mt-2">Wykryte problemy:</h5>
+                                <h5 className="text-sm font-semibold text-foreground">Podsumowanie:</h5>
+                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{summary}</p>
+                              </div>
+                            )}
+                            {issues.length > 0 && (
+                              <div className="space-y-3">
+                                <h5 className="text-sm font-semibold text-foreground">Wykryte problemy ({issues.length}):</h5>
                                 {issues.map((issue: any, idx: number) => (
-                                  <div key={idx} className="border-l-2 border-border pl-2">
-                                    <p className="text-sm font-medium">{issue.title}</p>
-                                    <p className="text-xs text-muted-foreground">{issue.description}</p>
+                                  <div key={idx} className="border-l-2 border-primary/30 pl-3 py-2 bg-background/50 rounded-r">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge 
+                                        variant={issue.severity === 'critical' || issue.severity === 'error' ? 'destructive' : 
+                                                 issue.severity === 'warning' ? 'default' : 'secondary'}
+                                        className="text-xs"
+                                      >
+                                        {issue.severity || 'info'}
+                                      </Badge>
+                                      {issue.category && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {issue.category}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm font-semibold text-foreground mb-1">{issue.title || 'Brak tytułu'}</p>
+                                    <p className="text-sm text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
                                     {issue.file_name && (
-                                      <p className="text-xs text-muted-foreground">
-                                        Plik: {issue.file_name} {issue.line_start && `linia ${issue.line_start}`}
+                                      <p className="text-xs text-muted-foreground mb-1">
+                                        📄 {issue.file_name} 
+                                        {issue.line_start && ` (linia ${issue.line_start}${issue.line_end && issue.line_end !== issue.line_start ? `-${issue.line_end}` : ''})`}
                                       </p>
                                     )}
                                     {issue.code_snippet && 
@@ -969,7 +917,7 @@ export function ReviewDetail() {
                                      !issue.suggested_fix.toLowerCase().includes('sugestia naprawy') &&
                                      issue.suggested_fix.trim() !== '1' && (
                                       <div className="mt-2">
-                                        <h6 className="text-xs font-semibold">Sugerowana poprawka:</h6>
+                                        <h6 className="text-xs font-semibold mb-1">💡 Sugerowana poprawka:</h6>
                                         {issue.suggested_fix.includes('\n') || issue.suggested_fix.length > 100 ? (
                                           <CodeViewer
                                             code={issue.suggested_fix}
@@ -978,7 +926,7 @@ export function ReviewDetail() {
                                             filename="Sugerowany kod"
                                           />
                                         ) : (
-                                          <p className="text-xs text-muted-foreground mt-1">{issue.suggested_fix}</p>
+                                          <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{issue.suggested_fix}</p>
                                         )}
                                       </div>
                                     )}
@@ -986,20 +934,27 @@ export function ReviewDetail() {
                                 ))}
                               </div>
                             )}
-                            {/* Show raw output if summary/issues parsing failed or is empty */}
-                            {!summary && issues.length === 0 && (
+                            {/* Show message if no issues found */}
+                            {hasContent && issues.length === 0 && (
+                              <div className="text-sm text-muted-foreground italic">
+                                ✓ Nie znaleziono problemów w tej kategorii
+                              </div>
+                            )}
+                            {/* Show raw output only if parsing completely failed */}
+                            {!hasContent && issues.length === 0 && (
                               <details className="mt-2 text-xs">
                                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Pokaż surową odpowiedź</summary>
                                 <pre className="mt-2 p-2 bg-background/50 rounded border overflow-auto max-h-48 text-xs">
-                                  {rawOutput}
+                                  {rawOutput.substring(0, 2000)}
                                 </pre>
                               </details>
                             )}
                           </div>
                         );
                       })()}
-                    </CardContent>
-                  )}
+                      </CardContent>
+                    )}
+                  </div>
                 </Card>
               ))}
             </CardContent>
@@ -1013,7 +968,7 @@ export function ReviewDetail() {
           <TabsTrigger value="issues">Problemy ({issues?.length || 0})</TabsTrigger>
           <TabsTrigger value="discussions" className="flex items-center gap-1">
             <MessageSquare className="h-4 w-4" />
-            Dyskusje i debaty
+            Dyskusje
           </TabsTrigger>
           <TabsTrigger value="files">Pliki ({project?.files?.length || 0})</TabsTrigger>
         </TabsList>
@@ -1062,8 +1017,11 @@ export function ReviewDetail() {
                   const isExpanded = expandedIssues.has(issue.id);
 
                   return (
-                    <Card key={issue.id} className={`border-l-4 ${getSeverityColor(issue.severity)} overflow-hidden`}>
-                      <CardHeader className="cursor-pointer" onClick={() => toggleIssue(issue.id)}>
+                    <Card key={issue.id} className={`border-l-4 ${getSeverityColor(issue.severity)} overflow-hidden transition-shadow duration-200 hover:shadow-md`}>
+                      <CardHeader 
+                        className="cursor-pointer hover:bg-muted/50 transition-colors duration-150" 
+                        onClick={() => toggleIssue(issue.id)}
+                      >
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3 flex-1">
                             {getSeverityIcon(issue.severity)}
@@ -1071,8 +1029,27 @@ export function ReviewDetail() {
                               <CardTitle className="text-lg flex items-center gap-2">
                                 {issue.title}
                               </CardTitle>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <Badge 
+                                  variant={
+                                    issue.severity === 'error' || issue.severity === 'critical' ? 'destructive' :
+                                    issue.severity === 'warning' ? 'default' : 'secondary'
+                                  }
+                                  className="text-xs"
+                                >
+                                  {issue.severity === 'error' || issue.severity === 'critical' ? '🔴' : 
+                                   issue.severity === 'warning' ? '🟡' : '🔵'} {issue.severity}
+                                </Badge>
                                 <Badge variant="outline" className="text-xs">{issue.category}</Badge>
+                                {issue.agent_role && (
+                                  <Badge 
+                                    variant="secondary" 
+                                    className="text-xs font-medium"
+                                    title={`Znaleziony przez agenta: ${issue.agent_role === 'general' ? 'Poprawność Kodu' : issue.agent_role === 'security' ? 'Bezpieczeństwo' : issue.agent_role === 'performance' ? 'Wydajność' : issue.agent_role === 'style' ? 'Jakość i Styl' : issue.agent_role}`}
+                                  >
+                                {issue.agent_role === 'general' ? '🔍 Poprawność Kodu' : issue.agent_role}
+                                  </Badge>
+                                )}
                                 {issue.file_name && (
                                   <span className="text-sm text-muted-foreground flex items-center gap-1">
                                     <FileCode className="h-3 w-3" />
@@ -1085,15 +1062,7 @@ export function ReviewDetail() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => startArenaDebate(e)}
-                              title="Zobacz debatę i uzasadnienia"
-                            >
-                              <MessageSquare className="h-3 w-3 mr-1" />
-                              Otwórz debatę
-                            </Button>
+                            {/* Remove debate button - not needed in main flow */}
                             <Button variant="ghost" size="sm">
                               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                             </Button>
@@ -1101,10 +1070,33 @@ export function ReviewDetail() {
                         </div>
                       </CardHeader>
 
-                      <CardContent className={isExpanded ? '' : 'hidden'}>
+                      <div 
+                        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                          isExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
+                        }`}
+                      >
+                        <CardContent className="pt-6">
+                        {/* Agent info - show which agent found this issue */}
+                        {issue.agent_role && (
+                          <div className="mb-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                            <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-2">
+                              👤 Znaleziony przez agenta:
+                            </div>
+                            <Badge variant="secondary" className="text-sm">
+                              {issue.agent_role === 'general' ? '🔍 Poprawność Kodu' : issue.agent_role}
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {issue.agent_role === 'general'
+                                ? 'Agent skupiający się na błędach składniowych, logicznych i bugach'
+                                : 'Agent analizujący kod'}
+                            </p>
+                          </div>
+                        )}
+                        
                         {/* Description */}
                         <div className="mb-4 p-4 bg-muted/50 rounded-lg">
-                          <p className="text-sm">{issue.description}</p>
+                          <h5 className="text-sm font-semibold mb-2">Opis problemu:</h5>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{issue.description}</p>
                         </div>
 
                         {/* Code Snippet */}
@@ -1139,7 +1131,8 @@ export function ReviewDetail() {
                             <p className="text-sm text-muted-foreground">{issue.suggestions[0].explanation}</p>
                           </div>
                         )}
-                      </CardContent>
+                        </CardContent>
+                      </div>
                     </Card>
                   );
                 })}
@@ -1183,10 +1176,24 @@ export function ReviewDetail() {
         </TabsContent>
 
         <TabsContent value="discussions" className="space-y-4">
-          <ConversationView
-            reviewId={parseInt(id || '0')}
-            issueId={undefined}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Dyskusje agenta
+              </CardTitle>
+              <CardDescription>
+                Ta sekcja pozwala na ręczne rozpoczęcie dodatkowych dyskusji nad konkretnymi problemami.
+                Podstawowe przeglądy są już widoczne w sekcji "Problemy" i "Odpowiedź agenta".
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ConversationView
+                reviewId={parseInt(id || '0')}
+                issueId={undefined}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="files" className="space-y-4">

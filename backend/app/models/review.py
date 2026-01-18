@@ -21,9 +21,7 @@ IssueStatus = Literal["open", "confirmed", "dismissed", "resolved"]
 class Review(SQLModel, table=True):
     """Code review performed by AI agents.
 
-    Wspiera dwa tryby:
-    - Council Mode: Agenci współpracują, dyskutują i dochodzą do konsensusu
-    - Arena Mode: Dwóch agentów debatuje nad problemem, moderator wydaje werdykt
+    Review wykonywany przez pojedynczego agenta.
     """
 
     __tablename__ = "reviews"
@@ -42,7 +40,7 @@ class Review(SQLModel, table=True):
         default="council",
         max_length=20,
         index=True,
-        description="Tryb review: 'council' (narada) lub 'arena' (walka)"
+        description="Tryb review: 'council' (narada)"
     )
     # Podsumowanie moderatora (końcowy raport)
     summary: str | None = Field(default=None, max_length=50_000)
@@ -62,7 +60,7 @@ class ReviewAgent(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     review_id: int = Field(foreign_key="reviews.id", index=True)
-    role: str = Field(max_length=50)  # general, security, performance, style
+    role: str = Field(max_length=50)  # general
     provider: str = Field(max_length=50)  # groq, gemini, ollama, mock
     model: str = Field(max_length=100)
     raw_output: str | None = Field(default=None, max_length=50_000)
@@ -90,6 +88,9 @@ class Issue(SQLModel, table=True):
     category: str = Field(max_length=100, index=True)  # security, performance, style, etc.
     title: str = Field(max_length=500)
     description: str = Field(max_length=5000)
+    
+    # Agent information - który agent znalazł ten problem
+    agent_role: str | None = Field(default=None, max_length=50, index=True)  # general
 
     # Location information
     file_name: str | None = Field(default=None, max_length=255)
@@ -146,8 +147,8 @@ class AgentConfig(SQLModel):
     model: str
     prompt: str | None = None
     temperature: float = 0.2
-    max_tokens: int = 2048
-    timeout_seconds: int = 180  # Domyślnie 3 minuty
+    max_tokens: int = 4096  # Zwiększono z 2048 aby agenci mogli generować pełniejsze odpowiedzi
+    timeout_seconds: int = 300  # Domyślnie 5 minut (zwiększono z 180s aby uniknąć timeoutów)
     # For custom providers
     custom_provider: CustomProviderConfig | None = None
 
@@ -155,34 +156,27 @@ class AgentConfig(SQLModel):
 class ReviewCreate(SQLModel):
     """Schema do tworzenia nowego review.
 
-    Wspiera dwa tryby:
-    - Council (narada): Agenci współpracują, moderator podsumowuje
-    - Arena (walka): Zespoły rywalizują, moderator wydaje werdykt
+    Review wykonywany przez pojedynczego agenta.
 
     Wymagane pola:
     - review_mode: 'council' lub 'arena'
     - agent_roles: lista ról agentów (np. ['general', 'security'])
     - agent_configs: konfiguracja dla każdej roli (z timeout_seconds)
-    - moderator_config: konfiguracja moderatora
     """
     # Wybór trybu review
     review_mode: ReviewMode = Field(
         ...,
-        description="Tryb review: 'council' (narada) lub 'arena' (walka)"
+        description="Tryb review: 'council' (narada)"
     )
 
     # Konfiguracja agentów
     agent_roles: list[str] = Field(
         default=["general"],
-        description="Role agentów: general, security, performance, style"
+        description="Role agentów: general"
     )
     agent_configs: dict[str, AgentConfig] | None = Field(
         default=None,
         description="Konfiguracja per agent: {role: AgentConfig}"
-    )
-    moderator_config: AgentConfig | None = Field(
-        default=None,
-        description="Konfiguracja moderatora"
     )
 
     # Klucze API
@@ -194,6 +188,10 @@ class ReviewCreate(SQLModel):
     # Deprecated - zachowane dla kompatybilności
     provider: str | None = Field(default=None, description="(Deprecated)")
     model: str | None = Field(default=None, description="(Deprecated)")
+
+    # Moderator (optional, used by council workflows)
+    moderator_type: str | None = Field(default=None, description="Typ moderatora (np. debate, consensus, strategic)")
+    moderator_config: AgentConfig | None = Field(default=None, description="Konfiguracja moderatora")
 
 
 class ReviewRead(SQLModel):
@@ -211,7 +209,9 @@ class ReviewRead(SQLModel):
     agent_count: int = 0
     issue_count: int = 0
     review_mode: ReviewMode = "council"
-    summary: str | None = None  # Raport moderatora
+    summary: str | None = None
+    # Model information - list of unique provider/model combinations used by agents
+    models: list[str] | None = None  # List of provider/model combinations (e.g., ['gemini/gemini-2.5-flash', 'groq/llama3'])
 
 
 class ReviewAgentRead(SQLModel):
@@ -239,6 +239,7 @@ class IssueRead(SQLModel):
     category: str
     title: str
     description: str
+    agent_role: str | None = None  # Which agent found this issue (general, security, performance, style)
     file_name: str | None
     line_start: int | None
     line_end: int | None

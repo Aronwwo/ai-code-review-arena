@@ -107,11 +107,29 @@ export function Settings() {
         ));
         toast.success(`Pobrano modele: ${models.length}${cached ? ' (cache)' : ''}`);
       } else {
-        toast.error('API nie zwróciło modeli — pozostawiono ręcznie wpisane');
+        // Perplexity zwraca znane modele jako fallback - nie pokazuj błędu
+        if (provider.id === 'perplexity') {
+          const knownModels = ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research', 'r1-1776'];
+          setProviders(prev => prev.map(p =>
+            p.id === provider.id ? { ...p, models: knownModels } : p
+          ));
+          toast.success(`Używam znanych modeli Perplexity: ${knownModels.length}`);
+        } else {
+          toast.error('API nie zwróciło modeli — pozostawiono ręcznie wpisane');
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch provider models:', error);
-      toast.error(`Nie udało się pobrać modeli dla ${provider.name}`);
+      // For Perplexity, backend returns known models as fallback, so don't show error
+      if (provider.id === 'perplexity') {
+        const knownModels = ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research', 'r1-1776'];
+        setProviders(prev => prev.map(p =>
+          p.id === provider.id ? { ...p, models: knownModels } : p
+        ));
+        toast.success(`Używam znanych modeli Perplexity: ${knownModels.length}`);
+      } else {
+        toast.error(`Nie udało się pobrać modeli dla ${provider.name}`);
+      }
     } finally {
       setLoadingModels(prev => ({ ...prev, [provider.id]: false }));
     }

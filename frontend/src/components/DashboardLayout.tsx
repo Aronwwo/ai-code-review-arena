@@ -21,9 +21,12 @@ import {
   Menu,
   X,
   Trophy,
+  Clock,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useSessionTimer } from '@/hooks/useSessionTimer';
+import { Badge } from '@/components/ui/Badge';
 
 export function DashboardLayout() {
   const { user, logout } = useAuth();
@@ -31,6 +34,7 @@ export function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sessionTimer = useSessionTimer();
 
   const handleLogout = async () => {
     await logout();
@@ -71,11 +75,21 @@ export function DashboardLayout() {
             </Link>
           ))}
         </nav>
+        <div className="border-t p-4">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-5 w-5" />
+            Wyloguj
+          </Button>
+        </div>
       </aside>
 
       {/* Mobile Sidebar */}
       {sidebarOpen && (
-        <aside className="fixed inset-0 z-50 bg-background md:hidden">
+        <aside className="fixed inset-0 z-50 flex flex-col bg-background md:hidden">
           <div className="flex h-16 items-center justify-between border-b px-4">
             <Link to="/dashboard" className="flex items-center gap-2">
               <Bot className="h-6 w-6 text-primary" />
@@ -89,7 +103,7 @@ export function DashboardLayout() {
               <X className="h-5 w-5" />
             </Button>
           </div>
-          <nav className="space-y-1 p-4">
+          <nav className="flex-1 space-y-1 p-4">
             {navItems.map((item) => (
               <Link
                 key={item.path}
@@ -106,6 +120,16 @@ export function DashboardLayout() {
               </Link>
             ))}
           </nav>
+          <div className="border-t p-4">
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-5 w-5" />
+              Wyloguj
+            </Button>
+          </div>
         </aside>
       )}
 
@@ -123,6 +147,33 @@ export function DashboardLayout() {
           </Button>
 
           <div className="flex-1" />
+
+          {/* Session Timer - Visible when authenticated */}
+          {sessionTimer.timeRemaining > 0 && (
+            <div className="flex items-center gap-2 mr-2">
+              <Badge 
+                variant={sessionTimer.isExpiringSoon ? "destructive" : "secondary"} 
+                className="gap-1.5 px-2 py-1"
+                title={`Sesja wygasa za ${sessionTimer.formattedTime}`}
+              >
+                <Clock className={`h-3 w-3 ${sessionTimer.isExpiringSoon ? 'animate-pulse' : ''}`} />
+                <span className="font-mono text-xs">
+                  {sessionTimer.formattedTime}
+                </span>
+              </Badge>
+              {sessionTimer.isExpiringSoon && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sessionTimer.refreshSession}
+                  className="text-xs h-7"
+                  title="Odśwież sesję"
+                >
+                  Odśwież
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* Theme Toggle */}
           <Button
