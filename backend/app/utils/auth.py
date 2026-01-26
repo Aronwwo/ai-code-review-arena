@@ -3,11 +3,8 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from app.config import settings
-
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Refresh token settings
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -22,8 +19,10 @@ def hash_password(password: str) -> str:
     """
     # Truncate to 72 bytes (bcrypt limit)
     password_bytes = password.encode('utf-8')[:72]
-    password_truncated = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.hash(password_truncated)
+    # Generate salt and hash
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -34,8 +33,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     # Truncate to 72 bytes (bcrypt limit)
     password_bytes = plain_password.encode('utf-8')[:72]
-    password_truncated = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.verify(password_truncated, hashed_password)
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
