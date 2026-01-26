@@ -30,9 +30,16 @@ def validate_code_content(content: str, filename: str) -> dict:
         return result
 
     # Check minimum length
-    if len(stripped) < 10:
+    if len(stripped) < settings.file_min_length:
         result["valid"] = False
-        result["errors"].append("Zawartość pliku jest zbyt krótka (minimum 10 znaków)")
+        result["errors"].append(f"Zawartość pliku jest zbyt krótka (minimum {settings.file_min_length} znaków)")
+        return result
+
+    # Check maximum file size
+    max_size_bytes = settings.max_file_size_mb * 1024 * 1024
+    if len(content) > max_size_bytes:
+        result["valid"] = False
+        result["errors"].append(f"Plik jest zbyt duży (maksymalnie {settings.max_file_size_mb}MB)")
         return result
 
     # Check for common code indicators
@@ -55,7 +62,7 @@ def validate_code_content(content: str, filename: str) -> dict:
     lines = stripped.split('\n')
     if len(lines) > 3:
         unique_lines = set(line.strip() for line in lines if line.strip())
-        if len(unique_lines) < len(lines) * 0.3:
+        if len(unique_lines) < len(lines) * settings.file_line_uniqueness_threshold:
             result["warnings"].append("Many repeated lines detected - may indicate low-quality content")
 
     # Check for binary/garbage characters

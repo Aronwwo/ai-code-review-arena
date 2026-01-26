@@ -1,5 +1,5 @@
 """Conversation API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query, Response, Request
 from sqlmodel import Session, select, func
 from app.database import get_session
 from app.models.user import User
@@ -17,6 +17,40 @@ from app.utils.access import verify_review_access
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 reviews_router = APIRouter(prefix="/reviews/{review_id}/conversations", tags=["conversations"])
 issues_router = APIRouter(prefix="/issues/{issue_id}/debate", tags=["conversations"])
+
+
+def build_link_header(request: Request, page: int, page_size: int, total: int) -> str:
+    """Build RFC 5988 compliant Link header for pagination.
+
+    Args:
+        request: FastAPI Request object
+        page: Current page number
+        page_size: Items per page
+        total: Total number of items
+
+    Returns:
+        Link header string with rel="first", "prev", "next", "last"
+    """
+    base_url = str(request.url.remove_query_params("page", "page_size"))
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 1
+
+    links = []
+
+    # First page
+    links.append(f'<{base_url}?page=1&page_size={page_size}>; rel="first"')
+
+    # Previous page
+    if page > 1:
+        links.append(f'<{base_url}?page={page - 1}&page_size={page_size}>; rel="prev"')
+
+    # Next page
+    if page < total_pages:
+        links.append(f'<{base_url}?page={page + 1}&page_size={page_size}>; rel="next"')
+
+    # Last page
+    links.append(f'<{base_url}?page={total_pages}&page_size={page_size}>; rel="last"')
+
+    return ", ".join(links)
 
 
 async def run_conversation_in_background(conversation_id: int, provider: str | None, model: str | None):
@@ -67,31 +101,49 @@ async def create_conversation(
 @reviews_router.get("", response_model=list[ConversationRead])
 async def list_review_conversations(
     review_id: int,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page")
 ):
-    """List all conversations for a review."""
+    """List all conversations for a review with pagination."""
     await verify_review_access(review_id, current_user, session)
 
+    offset = (page - 1) * page_size
+
+    # Get total count for pagination links
+    count_stmt = select(func.count(Conversation.id)).where(Conversation.review_id == review_id)
+    total = session.exec(count_stmt).one()
+
+    # Add Link header (RFC 5988)
+    if total > 0:
+        response.headers["Link"] = build_link_header(request, page, page_size, total)
+
+    # Optimized query with LEFT JOIN to avoid N+1 problem
     statement = (
-        select(Conversation)
+        select(
+            Conversation,
+            func.count(Message.id).label('message_count')
+        )
+        .outerjoin(Message, Message.conversation_id == Conversation.id)
         .where(Conversation.review_id == review_id)
+        .group_by(Conversation.id)
         .order_by(Conversation.created_at.desc())
+        .limit(page_size)
+        .offset(offset)
     )
-    conversations = session.exec(statement).all()
+    results = session.exec(statement).all()
 
-    # Build responses with counts
-    result = []
-    for conversation in conversations:
-        message_count_stmt = select(func.count(Message.id)).where(Message.conversation_id == conversation.id)
-        message_count = session.exec(message_count_stmt).one()
-
-        result.append(ConversationRead(
+    # Build responses with counts from single query
+    return [
+        ConversationRead(
             **conversation.model_dump(),
-            message_count=message_count
-        ))
-
-    return result
+            message_count=count
+        )
+        for conversation, count in results
+    ]
 
 
 @router.get("/{conversation_id}")

@@ -38,6 +38,14 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Validate user_id type to prevent injection attempts
+    if not isinstance(user_id, int):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Get user from database
     user = session.get(User, user_id)
     if user is None:

@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     enable_agent_caching: bool = True  # Cache odpowiedzi agentów (oszczędność kosztów)
     cache_ttl_hours: int = 24  # Cache ważny przez 24h
     max_prompt_chars: int = 12000  # Maksymalna długość promptu przed przycięciem
+    default_timeout_seconds: int = 300  # Domyślny timeout dla agentów (5 minut)
+    default_max_tokens: int = 4096  # Domyślna liczba max tokenów w odpowiedzi
+
+    # ==================== FILE VALIDATION ====================
+    file_min_length: int = 10  # Minimalna długość pliku (znaki)
+    file_line_uniqueness_threshold: float = 0.3  # Próg unikalności linii (30%)
 
     # ==================== LOGGING ====================
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL

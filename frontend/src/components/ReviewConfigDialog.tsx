@@ -46,11 +46,12 @@ const GENERAL_ROLE = {
   description: 'Wykrywa błędy składniowe, logiczne i krytyczne bugi.',
 } as const;
 
-const DEFAULT_AGENT_CONFIG: AgentConfig = {
+// Fallback default config (used if backend is unavailable)
+const FALLBACK_AGENT_CONFIG: AgentConfig = {
   provider: 'mock',
   model: 'mock-fast',
-  timeout: 180, // 3 minuty
-  max_tokens: 4096 // domyślnie 4096
+  timeout: 300, // 5 minutes (matches backend default)
+  max_tokens: 4096
 };
 
 export function ReviewConfigDialog({
@@ -71,6 +72,24 @@ export function ReviewConfigDialog({
     }
   }, [open]);
 
+  // Fetch default agent config from backend to ensure consistency
+  const { data: defaultConfig } = useQuery<AgentConfig>({
+    queryKey: ['default-agent-config'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/api/providers/default-config');
+        return response.data;
+      } catch {
+        return FALLBACK_AGENT_CONFIG;
+      }
+    },
+    enabled: open,
+    staleTime: 60 * 60 * 1000, // Cache for 1 hour
+    placeholderData: FALLBACK_AGENT_CONFIG,
+  });
+
+  const DEFAULT_AGENT_CONFIG = defaultConfig || FALLBACK_AGENT_CONFIG;
+
   const [config, setConfig] = useState<ReviewConfig>({
     mode: 'single',
     agent: { ...DEFAULT_AGENT_CONFIG },
@@ -90,11 +109,23 @@ export function ReviewConfigDialog({
       }
     },
     enabled: open,
-    staleTime: 0,
-    refetchOnMount: 'always',
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnMount: false,
   });
 
   const ollamaModels = useMemo(() => ollamaModelsData?.models || [], [ollamaModelsData?.models]);
+
+  // Update config when default config is loaded from backend
+  useEffect(() => {
+    if (defaultConfig && open) {
+      setConfig({
+        mode: 'single',
+        agent: { ...defaultConfig },
+        arenaA: { ...defaultConfig },
+        arenaB: { ...defaultConfig },
+      });
+    }
+  }, [defaultConfig, open]);
 
   // Aktualizuj providerów gdy załadują się modele Ollama
   useEffect(() => {

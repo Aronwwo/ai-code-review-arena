@@ -129,8 +129,8 @@ Jeśli brak błędów: {"issues": [], "summary": "Kod poprawny"}"""
             agent_config = typed_agent_configs.get(general_agent.role)
             agent_provider = general_agent.provider if general_agent.provider != "mock" else (provider_name or general_agent.provider)
             agent_model = general_agent.model if general_agent.model != "default" else (model or general_agent.model)
-            timeout_seconds = agent_config.timeout_seconds if agent_config else 300
-            max_tokens = agent_config.max_tokens if agent_config else 4096
+            timeout_seconds = agent_config.timeout_seconds if agent_config else settings.default_timeout_seconds
+            max_tokens = agent_config.max_tokens if agent_config else settings.default_max_tokens
 
             agent_api_key = None
             if api_keys and agent_provider:

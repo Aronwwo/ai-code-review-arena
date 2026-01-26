@@ -8,6 +8,7 @@ import logging
 
 from app.api.deps import get_current_user
 from app.utils.cache import cache
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,14 @@ class ProviderModelsRequest(BaseModel):
 class ProviderModelsResponse(BaseModel):
     models: list[str]
     cached: bool
+
+
+class DefaultAgentConfig(BaseModel):
+    """Default agent configuration from backend settings."""
+    provider: str
+    model: str
+    timeout: int  # timeout in seconds
+    max_tokens: int  # max tokens to generate
 
 
 async def _fetch_json_with_retry(url: str, headers: dict[str, str] | None = None) -> dict:
@@ -49,6 +58,22 @@ async def _fetch_json_with_retry(url: str, headers: dict[str, str] | None = None
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail=f"Failed to fetch models: {str(last_error)}"
+    )
+
+
+@router.get("/default-config", response_model=DefaultAgentConfig)
+async def get_default_agent_config(
+    current_user=Depends(get_current_user),
+):
+    """Get default agent configuration from backend settings.
+
+    This ensures frontend and backend use the same default values.
+    """
+    return DefaultAgentConfig(
+        provider=settings.default_provider,
+        model=settings.default_model,
+        timeout=settings.default_timeout_seconds,
+        max_tokens=settings.default_max_tokens,
     )
 
 

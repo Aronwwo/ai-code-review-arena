@@ -103,12 +103,14 @@ Odpowiadaj po polsku, zwięźle i konkretnie. Używaj TYLKO informacji z analiz 
         self.session.commit()
 
         try:
-            # Pobierz pliki projektu
-            files_query = select(File).where(File.project_id == project.id)
+            # Pobierz pliki projektu (max 20, tak jak w Review Mode)
+            files_query = select(File).where(File.project_id == project.id).limit(20)
             files = self.session.exec(files_query).all()
 
             if not files:
                 raise ValueError("Projekt nie ma żadnych plików do analizy")
+
+            logger.info(f"Arena {session_id}: Znaleziono {len(files)} plików do analizy (max 20)")
 
             # Zbuduj kontekst kodu
             code_context = self._build_code_context(files)
@@ -142,10 +144,33 @@ Odpowiadaj po polsku, zwięźle i konkretnie. Używaj TYLKO informacji z analiz 
         self.session.commit()
 
     def _build_code_context(self, files: list[File]) -> str:
-        """Zbuduj kontekst kodu dla agentów."""
+        """Zbuduj kontekst kodu dla agentów.
+
+        Obcina każdy plik do max 5000 znaków, żeby nie przekroczyć limitów LLM.
+        """
         context_parts = []
+        files_with_content = 0
+
         for f in files:
-            context_parts.append(f"=== {f.name} ===\n{f.content}\n")
+            content = f.content or ""
+
+            # Skip empty files
+            if not content.strip():
+                logger.warning(f"⚠️ Arena: Plik {f.name} jest pusty - pomijam")
+                continue
+
+            # Truncate long files (tak jak w Review Mode)
+            if len(content) > 5000:
+                content = content[:5000] + "\n... (obcięte)"
+                logger.debug(f"Arena: Plik {f.name} obcięty z {len(f.content)} do 5000 znaków")
+
+            files_with_content += 1
+            context_parts.append(f"=== {f.name} ===\n{content}\n")
+
+        if files_with_content == 0:
+            raise ValueError("Wszystkie pliki są puste - brak kodu do analizy")
+
+        logger.info(f"Arena: Zbudowano kontekst z {files_with_content} plików")
         return "\n".join(context_parts)
 
     async def _run_team(

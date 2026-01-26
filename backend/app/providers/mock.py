@@ -42,7 +42,17 @@ class MockProvider(LLMProvider):
         return self._generate_generic_response(messages)
 
     def _generate_review_response(self, messages: list[LLMMessage]) -> str:
-        """Generate a mock code review response."""
+        """Generate a mock code review response with role-specific issues.
+
+        Analyzes the system message to determine the agent role (security, performance,
+        or style) and generates appropriate mock issues for testing.
+
+        Args:
+            messages: List of conversation messages including system prompt
+
+        Returns:
+            JSON-formatted string containing mock code review issues
+        """
         # Determine agent role from system message
         system_messages = [m for m in messages if m.role == "system"]
         role = "general"
@@ -173,7 +183,17 @@ class MockProvider(LLMProvider):
         return json.dumps(response, indent=2)
 
     def _generate_debate_response(self, messages: list[LLMMessage]) -> str:
-        """Generate a mock debate response."""
+        """Generate a mock debate response for adversarial mode.
+
+        Creates mock arguments from either prosecutor (arguing for issue severity)
+        or defender (arguing against) perspective based on system prompt.
+
+        Args:
+            messages: List of conversation messages including system prompt
+
+        Returns:
+            Text argument from prosecutor or defender perspective
+        """
         # Determine role
         system_messages = [m for m in messages if m.role == "system"]
         role = "unknown"
@@ -212,7 +232,17 @@ Given these mitigating factors, downgrading the severity to WARNING would be mor
         return "I understand both perspectives on this issue."
 
     def _generate_moderator_response(self, messages: list[LLMMessage]) -> str:
-        """Generate a mock moderator response."""
+        """Generate a mock moderator response for council/arena modes.
+
+        Creates mock verdicts for arena mode (confirming/rejecting issues after debate)
+        or summary responses for council mode (synthesizing agent discussions).
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            JSON-formatted verdict or summary
+        """
         # Check if this is an arena verdict
         if any("prosecutor" in m.content.lower() or "defender" in m.content.lower() for m in messages):
             # Generate verdict
@@ -241,5 +271,15 @@ Given these mitigating factors, downgrading the severity to WARNING would be mor
         return json.dumps(summary, indent=2)
 
     def _generate_generic_response(self, messages: list[LLMMessage]) -> str:
-        """Generate a generic mock response."""
+        """Generate a generic mock response for testing.
+
+        Fallback response generator for cases that don't match specific review,
+        debate, or moderator patterns.
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            Generic placeholder text
+        """
         return "This is a mock response from the AI Code Review Arena. In production, this would be replaced with actual LLM output."

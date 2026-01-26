@@ -16,8 +16,53 @@ export function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Real-time validation errors
+  const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  // Real-time validation handlers
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    if (value && !validateEmail(value)) {
+      setEmailError('Nieprawidłowy format adresu email');
+    } else {
+      setEmailError('');
+    }
+  };
+
+  const handleUsernameChange = (value: string) => {
+    setUsername(value);
+    const result = validateUsername(value);
+    setUsernameError(result.valid ? '' : result.error || '');
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    const { valid, errors } = validatePassword(value);
+    setPasswordError(valid ? '' : errors.join(', '));
+
+    // Re-validate confirm password if it's already filled
+    if (confirmPassword && value !== confirmPassword) {
+      setConfirmPasswordError('Hasła nie są identyczne');
+    } else if (confirmPassword) {
+      setConfirmPasswordError('');
+    }
+  };
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value);
+    if (value && value !== password) {
+      setConfirmPasswordError('Hasła nie są identyczne');
+    } else {
+      setConfirmPasswordError('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,10 +147,14 @@ export function Register() {
                   type="email"
                   placeholder="twoj@email.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => handleEmailChange(e.target.value)}
                   required
                   disabled={isLoading}
+                  className={emailError ? 'border-destructive' : ''}
                 />
+                {emailError && (
+                  <p className="text-sm text-destructive">{emailError}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="username">Nazwa użytkownika</Label>
@@ -114,11 +163,15 @@ export function Register() {
                   type="text"
                   placeholder="jankowalski"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => handleUsernameChange(e.target.value)}
                   required
                   minLength={3}
                   disabled={isLoading}
+                  className={usernameError ? 'border-destructive' : ''}
                 />
+                {usernameError && (
+                  <p className="text-sm text-destructive">{usernameError}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Hasło</Label>
@@ -127,11 +180,15 @@ export function Register() {
                   type="password"
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
                   required
                   minLength={8}
                   disabled={isLoading}
+                  className={passwordError ? 'border-destructive' : ''}
                 />
+                {passwordError && (
+                  <p className="text-sm text-destructive">Wymagane: {passwordError}</p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Minimum 8 znaków, wielka litera, mała litera, cyfra
                 </p>
@@ -143,10 +200,14 @@ export function Register() {
                   type="password"
                   placeholder="••••••••"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
                   required
                   disabled={isLoading}
+                  className={confirmPasswordError ? 'border-destructive' : ''}
                 />
+                {confirmPasswordError && (
+                  <p className="text-sm text-destructive">{confirmPasswordError}</p>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">

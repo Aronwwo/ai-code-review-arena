@@ -1,5 +1,5 @@
 """Review API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query, Response, Request
 from sqlmodel import Session, select, func
 from sqlalchemy.orm import selectinload
 from app.database import get_session
@@ -16,6 +16,40 @@ from app.utils.access import verify_project_access, verify_review_access
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 projects_router = APIRouter(prefix="/projects/{project_id}/reviews", tags=["reviews"])
+
+
+def build_link_header(request: Request, page: int, page_size: int, total: int) -> str:
+    """Build RFC 5988 compliant Link header for pagination.
+
+    Args:
+        request: FastAPI Request object
+        page: Current page number
+        page_size: Items per page
+        total: Total number of items
+
+    Returns:
+        Link header string with rel="first", "prev", "next", "last"
+    """
+    base_url = str(request.url.remove_query_params("page", "page_size"))
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 1
+
+    links = []
+
+    # First page
+    links.append(f'<{base_url}?page=1&page_size={page_size}>; rel="first"')
+
+    # Previous page
+    if page > 1:
+        links.append(f'<{base_url}?page={page - 1}&page_size={page_size}>; rel="prev"')
+
+    # Next page
+    if page < total_pages:
+        links.append(f'<{base_url}?page={page + 1}&page_size={page_size}>; rel="next"')
+
+    # Last page
+    links.append(f'<{base_url}?page={total_pages}&page_size={page_size}>; rel="last"')
+
+    return ", ".join(links)
 
 
 async def run_review_in_background(
@@ -189,42 +223,80 @@ async def create_review(
 @projects_router.get("", response_model=list[ReviewRead])
 async def list_project_reviews(
     project_id: int,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page")
 ):
-    """List all reviews for a project."""
+    """List all reviews for a project with pagination."""
     await verify_project_access(project_id, current_user, session)
+
+    offset = (page - 1) * page_size
+
+    # Get total count for pagination links
+    count_stmt = select(func.count(Review.id)).where(Review.project_id == project_id)
+    total = session.exec(count_stmt).one()
+
+    # Add Link header (RFC 5988)
+    if total > 0:
+        response.headers["Link"] = build_link_header(request, page, page_size, total)
 
     statement = (
         select(Review)
         .where(Review.project_id == project_id)
         .order_by(Review.created_at.desc())
+        .limit(page_size)
+        .offset(offset)
     )
     reviews = session.exec(statement).all()
 
-    # Build responses with counts and model information
-    result = []
-    for review in reviews:
-        agent_count_stmt = select(func.count(ReviewAgent.id)).where(ReviewAgent.review_id == review.id)
-        agent_count = session.exec(agent_count_stmt).one()
+    if not reviews:
+        return []
 
-        issue_count_stmt = select(func.count(Issue.id)).where(Issue.review_id == review.id)
-        issue_count = session.exec(issue_count_stmt).one()
+    # Optimized queries to avoid N+1 problem - fetch all counts in 3 queries instead of N*3
+    review_ids = [r.id for r in reviews]
 
-        # Get unique provider/model combinations from agents
-        agents_stmt = select(ReviewAgent.provider, ReviewAgent.model).where(ReviewAgent.review_id == review.id)
-        agents_data = session.exec(agents_stmt).all()
-        # Create list of unique "provider/model" strings
-        models_list = list(set([f"{agent.provider}/{agent.model}" for agent in agents_data if agent.provider and agent.model]))
+    # Get agent counts for all reviews in one query
+    agent_counts = dict(
+        session.exec(
+            select(ReviewAgent.review_id, func.count(ReviewAgent.id))
+            .where(ReviewAgent.review_id.in_(review_ids))
+            .group_by(ReviewAgent.review_id)
+        ).all()
+    )
 
-        result.append(ReviewRead(
+    # Get issue counts for all reviews in one query
+    issue_counts = dict(
+        session.exec(
+            select(Issue.review_id, func.count(Issue.id))
+            .where(Issue.review_id.in_(review_ids))
+            .group_by(Issue.review_id)
+        ).all()
+    )
+
+    # Get all agents for all reviews in one query
+    agents_by_review = {}
+    for review_id, provider, model in session.exec(
+        select(ReviewAgent.review_id, ReviewAgent.provider, ReviewAgent.model)
+        .where(ReviewAgent.review_id.in_(review_ids))
+    ).all():
+        if review_id not in agents_by_review:
+            agents_by_review[review_id] = []
+        if provider and model:
+            agents_by_review[review_id].append((provider, model))
+
+    # Build responses using pre-fetched data
+    return [
+        ReviewRead(
             **review.model_dump(),
-            agent_count=agent_count,
-            issue_count=issue_count,
-            models=models_list
-        ))
-
-    return result
+            agent_count=agent_counts.get(review.id, 0),
+            issue_count=issue_counts.get(review.id, 0),
+            models=list(set([f"{p}/{m}" for p, m in agents_by_review.get(review.id, [])]))
+        )
+        for review in reviews
+    ]
 
 
 @router.get("/{review_id}", response_model=ReviewRead)
@@ -303,6 +375,8 @@ async def get_review_agents(
 @router.get("/{review_id}/issues")
 async def get_review_issues(
     review_id: int,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
     severity: str | None = Query(None, description="Filter by severity"),
@@ -314,7 +388,7 @@ async def get_review_issues(
     """Get all issues from a review with optional filters and pagination."""
     import logging
     logger = logging.getLogger(__name__)
-    
+
     review = session.get(Review, review_id)
 
     if not review:
@@ -347,6 +421,10 @@ async def get_review_issues(
         total = session.exec(count_query).one()
         logger.info(f"Found {total} total issues for review {review_id}")
 
+        # Add Link header (RFC 5988)
+        if total > 0:
+            response.headers["Link"] = build_link_header(request, page, page_size, total)
+
         # Calculate offset and get paginated results with eager loading of suggestions
         # Use selectinload to prevent N+1 query problem
         offset = (page - 1) * page_size
@@ -360,7 +438,6 @@ async def get_review_issues(
         )
         issues = session.exec(statement).all()
         logger.info(f"Retrieved {len(issues)} issues for review {review_id} (page {page})")
-        print(f"DEBUG: Retrieved {len(issues)} issues")  # Direct stdout
     except Exception as e:
         logger.error(f"Error fetching issues for review {review_id}: {e}", exc_info=True)
         raise HTTPException(

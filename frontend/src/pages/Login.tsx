@@ -14,8 +14,22 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Real-time validation errors
+  const [emailError, setEmailError] = useState('');
+
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Real-time validation handler
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    if (value && !validateEmail(value)) {
+      setEmailError('Nieprawidłowy format adresu email');
+    } else {
+      setEmailError('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,10 +95,14 @@ export function Login() {
                   type="email"
                   placeholder="twoj@email.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => handleEmailChange(e.target.value)}
                   required
                   disabled={isLoading}
+                  className={emailError ? 'border-destructive' : ''}
                 />
+                {emailError && (
+                  <p className="text-sm text-destructive">{emailError}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Hasło</Label>

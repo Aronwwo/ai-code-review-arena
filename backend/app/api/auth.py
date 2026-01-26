@@ -1,6 +1,5 @@
 """Authentication API endpoints."""
 import logging
-import re
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlmodel import Session, select
@@ -15,6 +14,7 @@ from app.utils.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
+from app.utils.validation import validate_email_format, validate_password_strength
 from app.config import settings
 from app.utils.audit import log_audit_event, get_client_ip, get_user_agent
 from app.utils.rate_limit import check_rate_limit
@@ -24,29 +24,6 @@ from app.api.deps import get_current_user
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def validate_password_strength(password: str) -> tuple[bool, str]:
-    """Validate password meets security requirements.
-
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    if len(password) < 8:
-        return False, "Hasło musi mieć minimum 8 znaków"
-    if not re.search(r'[A-Z]', password):
-        return False, "Hasło musi zawierać przynajmniej jedną wielką literę"
-    if not re.search(r'[a-z]', password):
-        return False, "Hasło musi zawierać przynajmniej jedną małą literę"
-    if not re.search(r'\d', password):
-        return False, "Hasło musi zawierać przynajmniej jedną cyfrę"
-    return True, ""
-
-
-def validate_email_format(email: str) -> bool:
-    """Validate email format."""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return bool(re.match(pattern, email))
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> str:

@@ -76,7 +76,18 @@ class ProviderRouter:
         return False
 
     def _sanitize_messages(self, messages: list[LLMMessage]) -> list[LLMMessage]:
-        """Sanitize messages to avoid refusal triggers."""
+        """Sanitize messages to avoid refusal triggers from LLM providers.
+
+        Some LLMs refuse to respond to prompts containing certain keywords like "combat"
+        that suggest violent content. This method replaces such trigger words with
+        neutral alternatives.
+
+        Args:
+            messages: List of conversation messages to sanitize
+
+        Returns:
+            List of sanitized messages with trigger words replaced
+        """
         sanitized: list[LLMMessage] = []
         for msg in messages:
             content = msg.content
@@ -85,7 +96,17 @@ class ProviderRouter:
         return sanitized
 
     def _truncate_messages(self, messages: list[LLMMessage]) -> list[LLMMessage]:
-        """Truncate long messages to keep total prompt size bounded."""
+        """Truncate long messages to keep total prompt size within limits.
+
+        Prevents exceeding LLM context windows by limiting total prompt character count.
+        System messages are preserved while user/assistant messages are trimmed if needed.
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            List of messages with content truncated to fit within max_prompt_chars limit
+        """
         max_chars = settings.max_prompt_chars
         total_chars = sum(len(m.content) for m in messages)
         if total_chars <= max_chars:
